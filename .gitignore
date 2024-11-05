@@ -1,0 +1,6 @@
+# .gitignore
+.env
+apiaudioai/
+apiaudioai/Lib/
+apiaudioai/Scripts/
+apiaudioai/share/
