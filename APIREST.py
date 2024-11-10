@@ -1,45 +1,60 @@
 from flask import Flask, request, jsonify
 import whisper
-import sqlite3
 from datetime import datetime
 import requests
 import os
 from openai import OpenAI
-import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 app = Flask(__name__)
+
+load_dotenv()
+
+# Configurações de conexão com o PostgreSQL
+# DATABASE_URL = os.getenv("DB_URL")
+DATABASE_URL = "postgresql://api_reclamacao:gabriel09@127.0.0.1:5432/api_reclamacao"
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
 # Inicializa o modelo Whisper (ou pode ser chamado quando necessário)
 modelo_whisper = whisper.load_model("base")
 apikey = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=apikey)
 
-# Configuração do banco de dados
-def inicializar_banco():
-    conexao = sqlite3.connect("dados_audio.db")
-    cursor = conexao.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS registros (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        transcricao TEXT,
-                        categoria TEXT,
-                        subcategoria TEXT,
-                        tema TEXT,
-                        resumo TEXT,
-                        data_hora TEXT,
-                        bairro TEXT
-                    )''')
-    conexao.commit()
-    conexao.close()
+# Modelo da tabela usando SQLAlchemy ORM
+class Registro(Base):
+    __tablename__ = "registros"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    transcricao = Column(Text, nullable=False)
+    categoria = Column(String, nullable=False)
+    subcategoria = Column(String, nullable=False)
+    tema = Column(String, nullable=False)
+    resumo = Column(Text, nullable=False)
+    data_hora = Column(DateTime, default=datetime.utcnow)
+    bairro = Column(String, nullable=False)
 
-# Função para salvar dados no banco
+# Criação da tabela no banco de dados
+Base.metadata.create_all(bind=engine)
+
+# Função para salvar dados no banco usando SQLAlchemy
 def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro):
-    data_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    conexao = sqlite3.connect("dados_audio.db")
-    cursor = conexao.cursor()
-    cursor.execute("INSERT INTO registros (transcricao, categoria, subcategoria, tema, resumo, data_hora, bairro) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                   (transcricao, categoria, subcategoria, tema, resumo, data_hora, bairro))
-    conexao.commit()
-    conexao.close()
+    session = SessionLocal()
+    novo_registro = Registro(
+        transcricao=transcricao,
+        categoria=categoria,
+        subcategoria=subcategoria,
+        tema=tema,
+        resumo=resumo,
+        bairro=bairro
+    )
+    session.add(novo_registro)
+    session.commit()
+    session.close()
 
 
 # Função para download de áudio
@@ -87,7 +102,7 @@ def gerar_relatorio_detalhado(texto):
     prompt = (
             f"Sabendo que se trata de um texto que será encaminhado para uma secretaria municipal."
             f"Primeiro classifique o texto em algumas dessas opções: Meio Ambiente, Educação, Fazenda, Infraestrutura, Limpeza Urbana, Turismo, Saúde, Mobilidade Urbana."
-            f"Depois escreva uma subcategoria. Em seguida defina o tema principal abordado."
+            f"Depois escreva uma subcategoria. Algumas opções de subcategorias: vagas para sepultamento, indicação de descarte irregular, falta de coleta domiciliar, poda de arvore, supressão de arvore, capinação, limpeza em geral, tapar buraco, implantação de asfalto, manutenção de vias não pavimentadas, alagamento, afundamento, limpeza de boca de lobo, marcação de exames consultas e cirurgias, unidade de saúde, atendimento medico. Em seguida defina o tema principal abordado."
             f"Após esses passos, faça um resumo bem objetivo."
             f"sempre me retorne nessa estrutura, exemplo: Categoria: Infraestrutura Subcategoria: Praças Tema: Iluminação Resumo: puxar do texto"
             f"Gere de acordo com esse conteúdo: {texto}"
@@ -108,8 +123,30 @@ def gerar_relatorio_detalhado(texto):
         "tema": partes.get("Tema", ""),
         "resumo": partes.get("Resumo", "")
     }
+    
+# Endpoint para obter relatórios
+@app.route('/api/reclamacoes/relatorios', methods=['GET'])
+def consultar_reclamacoes():
+    session = SessionLocal()
+    registros = session.query(Registro).all()
+    session.close()
+
+    relatorios = []
+    for r in registros:
+        relatorios.append({
+            "id": r.id,
+            "transcricao": r.transcricao,
+            "categoria": r.categoria,
+            "subcategoria": r.subcategoria,
+            "tema": r.tema,
+            "resumo": r.resumo,
+            "data_hora": r.data_hora,
+            "bairro": r.bairro
+        })
+
+    return jsonify(relatorios)
+
 
 if __name__ == '__main__':
-    inicializar_banco()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
