@@ -1,1 +1,1 @@
-web: python APIREST:app
+web: python APIREST.py
