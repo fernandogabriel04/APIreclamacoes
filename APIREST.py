@@ -15,8 +15,8 @@ load_dotenv()
 
 
 # Configurações de conexão com o PostgreSQL
-DATABASE_URL = os.getenv("DATABASE_URL")
-
+# DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = 'postgresql://u6qnkqvhq27oaa:p6fe57327870800b95d8241605da7affc91f2430b7081a9e87a8c89ecc75275fb@cb5ajfjosdpmil.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/dfvgqlobepq26r'
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
