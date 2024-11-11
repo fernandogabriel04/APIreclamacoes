@@ -1,1 +1,1 @@
-web: python APIREST.py
+web: gunicorn APIREST:app
