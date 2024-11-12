@@ -13,9 +13,8 @@ app = Flask(__name__)
 
 load_dotenv()
 
-
 # Configurações de conexão com o PostgreSQL
-DATABASE_URL = os.getenv("DB_URL")
+DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -24,6 +23,7 @@ Base = declarative_base()
 modelo_whisper = whisper.load_model("base")
 apikey = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=apikey)
+
 
 # Modelo da tabela usando SQLAlchemy ORM
 class Registro(Base):
