@@ -15,7 +15,7 @@ load_dotenv()
 
 # Configurações de conexão com o PostgreSQL
 DATABASE_URL = os.getenv("DB_URL")
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=10, pool_timeout=30, pool_recycle=1800)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
