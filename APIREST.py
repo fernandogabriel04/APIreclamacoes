@@ -17,7 +17,7 @@ load_dotenv()
 
 # Configurações de conexão com o PostgreSQL
 DATABASE_URL = os.getenv("DB_URL")
-engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=10, pool_timeout=30, pool_recycle=1800)
+engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=2, pool_recycle=30, pool_pre_ping=True, pool_use_lifo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -44,7 +44,7 @@ class Registro(Base):
 Base.metadata.create_all(bind=engine)
 
 # Função para salvar dados no banco usando SQLAlchemy
-def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro):
+async def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro):
     session = SessionLocal()
     novo_registro = Registro(
         transcricao=transcricao,
@@ -54,9 +54,9 @@ def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro):
         resumo=resumo,
         bairro=bairro
     )
-    session.add(novo_registro)
-    session.commit()
-    session.close()
+    await session.add(novo_registro)
+    await session.commit()
+    await session.close()
 
 
 # Função para download de áudio
