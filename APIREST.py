@@ -97,7 +97,7 @@ def receber_reclamacao():
         return jsonify({"error": "Tipo inválido. Use 'texto' ou 'audio'."}), 400
 
 def transcrever_audio(arquivo_audio):
-    resultado = modelo_whisper.transcribe(arquivo_audio)
+    resultado = modelo_whisper.transcribe(arquivo_audio, ffmpeg="/usr/bin/ffmpeg")
     return resultado['text']
 
 def gerar_relatorio_detalhado(texto):
