@@ -44,7 +44,7 @@ class Registro(Base):
 Base.metadata.create_all(bind=engine)
 
 # Função para salvar dados no banco usando SQLAlchemy
-async def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro):
+def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro):
     session = SessionLocal()
     novo_registro = Registro(
         transcricao=transcricao,
@@ -54,9 +54,9 @@ async def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairr
         resumo=resumo,
         bairro=bairro
     )
-    await session.add(novo_registro)
-    await session.commit()
-    await session.close()
+    session.add(novo_registro)
+    session.commit()
+    session.close()
 
 
 # Função para download de áudio
