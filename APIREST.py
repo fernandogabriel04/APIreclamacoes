@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import pytz
 
 app = Flask(__name__)
 
@@ -20,7 +21,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # Inicializa o modelo Whisper (ou pode ser chamado quando necessário)
-modelo_whisper = whisper.load_model("base")
+modelo_whisper = whisper.load_model("small")
 apikey = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=apikey)
 
@@ -35,7 +36,7 @@ class Registro(Base):
     subcategoria = Column(String, nullable=False)
     tema = Column(String, nullable=False)
     resumo = Column(Text, nullable=False)
-    data_hora = Column(DateTime, default=datetime.utcnow)
+    data_hora = Column(DateTime, default=lambda: datetime.now(pytz.timezone('America/Sao_Paulo')))
     bairro = Column(String, nullable=False)
 
 # Criação da tabela no banco de dados
@@ -99,17 +100,28 @@ def transcrever_audio(arquivo_audio):
     return resultado['text']
 
 def gerar_relatorio_detalhado(texto):
+    instructions = (
+        f"Você é um assistente que classifica textos de denúncias/reclamações direcionados a secretaria municipal de Maceió."
+        f"Responda no formato: "
+        f"Categoria: <categoria>\n"
+        f"Subcategoria: <subcategoria>\n"
+        f"Tema: <tema>\n"
+        f"Resumo: <resumo>\n\n"
+    )
     prompt = (
-            f"Sabendo que se trata de um texto que será encaminhado para uma secretaria municipal."
-            f"Primeiro classifique o texto em algumas dessas opções: Meio Ambiente, Educação, Fazenda, Infraestrutura, Limpeza Urbana, Turismo, Saúde, Transporte."
-            f"Depois escreva uma subcategoria. Algumas opções de subcategorias: Vagas para Sepultamento, Indicação de Descarte Irregular, Falta de Coleta Domiciliar, Poda de Árvore, Supressão de Árvore, Capinação, Limpeza em Geral, Tapar Buraco, Implantação de Asfalto, Manutenção de Vias não Pavimentadas, Alagamento, Afundamento, Limpeza de Boca de Lobo, Marcação de Exames Consultas e Cirurgias, Unidade de Saúde, Atendimento Medico, Ônibus, Tempo de Viagem, Linhas, Integração, Terminais, Abrigos, VAMU (Cartão de Transporte), Acessibilidade em Transporte. Em seguida defina o tema principal abordado."
-            f"Após esses passos, faça um resumo bem objetivo."
-            f"sempre me retorne nessa estrutura, exemplo: Categoria: Infraestrutura Subcategoria: Praças Tema: Iluminação Resumo: puxar do texto"
-            f"Gere de acordo com esse conteúdo: {texto}"
+            "Para cada texto, siga estas etapas: "
+            "1. Classifique o texto em uma das seguintes categorias principais: Meio Ambiente, Educação, Fazenda, Infraestrutura, Limpeza Urbana, Turismo, Saúde, Transporte. "
+            "2. Dentro da categoria escolhida, atribua uma subcategoria entre as opções: Vagas para Sepultamento, Indicação de Descarte Irregular, Falta de Coleta Domiciliar, Poda de Árvore, Supressão de Árvore, Capinação, Limpeza em Geral, Tapar Buraco, Implantação de Asfalto, Manutenção de Vias não Pavimentadas, Alagamento, Afundamento, Limpeza de Boca de Lobo, Marcação de Exames Consultas e Cirurgias, Unidade de Saúde, Atendimento Médico, Ônibus, Tempo de Viagem, Linhas, Integração, Terminais, Abrigos, VAMU (Cartão de Transporte), Acessibilidade em Transporte. Se for necessário crie uma subcategoria condizente com o texto. "
+            "3. Identifique o tema principal do texto. "
+            "4. Crie um resumo objetivo baseado no conteúdo da reclamação. "
+            f"Agora analise o seguinte texto e realize o processo: {texto}"
               )
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}]
+        messages=[
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": prompt}
+        ]
     )
     relatorio = response.choices[0].message.content
     print(f"Relatório gerado: {relatorio}")
@@ -140,7 +152,7 @@ def consultar_reclamacoes():
             "subcategoria": r.subcategoria,
             "tema": r.tema,
             "resumo": r.resumo,
-            "data_hora": r.data_hora,
+            "data_hora": r.data_hora.astimezone(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M:%S'),
             "bairro": r.bairro
         })
 
