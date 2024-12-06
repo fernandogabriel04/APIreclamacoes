@@ -152,7 +152,7 @@ def consultar_reclamacoes():
             "subcategoria": r.subcategoria,
             "tema": r.tema,
             "resumo": r.resumo,
-            "data_hora": r.data_hora.astimezone(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M:%S'),
+            "data_hora": r.data_hora.strftime('%d/%m/%Y %H:%M:%S'),
             "bairro": r.bairro
         })
 
