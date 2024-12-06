@@ -102,9 +102,9 @@ def transcrever_audio(arquivo_audio):
 
 def corrigir_transcricao(texto):
     instructions = (
-        "Você é um assistente de correção de textos que segue as normas da língua portuguesa. O texto a ser corrigido se passa na cidade de Maceió, então leve em consideração palavras, expressões, localizações e referências culturais que sejam comuns ou específicas de Maceió. "
+        "Você é um assistente de correção de textos que segue as normas da língua portuguesa. O texto a ser corrigido é sobre um feedback que se passa na cidade de Maceió, então leve em consideração palavras, expressões e localizações que sejam comuns ou específicas de Maceió. "
     )
-    prompt = f"Reescreva o texto abaixo de forma clara e corrigida, seguindo os padroes da lingua portuguesa:\n\n{texto}"
+    prompt = f"Reescreva o texto abaixo de forma clara e corrigida:\n\n{texto}"
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "system", "content": instructions},
