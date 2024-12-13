@@ -87,48 +87,48 @@ def dashboard_layout():
                 html.Label("Filtrar por Ano:", style={"fontWeight": "bold"}),
                 dcc.Dropdown(id="ano-dropdown", placeholder="Selecione um ano",
                              style={"width": "100%", "padding": "3px", "borderRadius": "5px", "backgroundColor": "#f9f9f9"})
-            ], style={"width": "30%", "display": "inline-block", "padding": "10px"}),
+            ], style={"flex": "1 1 200px", "padding": "10px"}),
 
             html.Div([
                 html.Label("Filtrar por Categoria:", style={"fontWeight": "bold"}),
                 dcc.Dropdown(id="categoria-dropdown", placeholder="Selecione uma categoria",
                              style={"width": "100%", "padding": "3px", "borderRadius": "5px", "backgroundColor": "#f9f9f9"})
-            ], style={"width": "30%", "display": "inline-block", "padding": "10px"}),
+            ], style={"flex": "1 1 200px", "padding": "10px"}),
 
             html.Div([
                 html.Label("Filtrar por Bairro:", style={"fontWeight": "bold"}),
                 dcc.Dropdown(id="bairro-dropdown", placeholder="Selecione um bairro",
                              style={"width": "100%", "padding": "3px", "borderRadius": "5px", "backgroundColor": "#f9f9f9"})
-            ], style={"width": "30%", "display": "inline-block", "padding": "10px"}),
+            ], style={"flex": "1 1 200px", "padding": "10px"}),
 
             html.Div([
                 html.Label("Buscar por Palavra-chave:", style={"fontWeight": "bold"}),
                 dcc.Input(id="search-box", type="text", placeholder="Digite uma palavra-chave", debounce=True, style={
                     "width": "100%", "padding": "10px", "borderRadius": "5px", "border": "1px solid #ccc", "fontSize": "14px", "backgroundColor": "#f9f9f9", "boxShadow": "0 2px 4px rgba(0, 0, 0, 0.1)", "transition": "all 0.3s ease"
                 })
-            ], style={"width": "30%", "display": "inline-block", "padding": "10px"})
-        ], style={"backgroundColor": "#f9f9f9"}),
+            ], style={"flex": "1 1 200px", "padding": "10px"})
+        ], style={"display": "flex", "flex-wrap": "wrap", "backgroundColor": "#f9f9f9"}),
 
         # Gráficos
         html.Div([
             html.Div([
-                dcc.Graph(id="grafico-categorias", style={"marginTop": "20px"})
-            ], style={"width": "50%", "display": "inline-block"}),
+                dcc.Graph(id="grafico-categorias", style={"marginTop": "20px", "height": "300px"})
+            ], style={"flex": "1 1 45%", "padding": "10px"}),
 
             html.Div([
-                dcc.Graph(id="grafico-mensal", style={"marginTop": "20px"})
-            ], style={"width": "50%", "display": "inline-block"})
-        ]),
+                dcc.Graph(id="grafico-mensal", style={"marginTop": "20px", "height": "300px"})
+            ], style={"flex": "1 1 45%", "padding": "10px"})
+        ], style={"display": "flex", "flex-wrap": "wrap"}),
 
         html.Div([
             html.Div([
-                dcc.Graph(id="grafico-bairros", style={"marginTop": "20px"})
-            ], style={"width": "50%", "display": "inline-block"}),
+                dcc.Graph(id="grafico-bairros", style={"marginTop": "20px", "height": "300px"})
+            ], style={"flex": "1 1 45%", "padding": "10px"}),
 
             html.Div([
-                dcc.Graph(id="grafico-top-bairros", style={"marginTop": "20px"})
-            ], style={"width": "50%", "display": "inline-block"})
-        ]),
+                dcc.Graph(id="grafico-top-bairros", style={"marginTop": "20px", "height": "300px"})
+            ], style={"flex": "1 1 45%", "padding": "10px"})
+        ], style={"display": "flex", "flex-wrap": "wrap"}),
         
         # Nuvem de palavras
         html.Div([
