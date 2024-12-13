@@ -9,12 +9,12 @@ from dotenv import load_dotenv
 from flask import Flask, session
 from dash.exceptions import PreventUpdate
 
+load_dotenv()
 # Configuração do app Dash e Flask
 server = Flask(__name__)
 server.secret_key = os.getenv("SECRET_KEY")  # Chave para gerenciar sessões no Flask
 app = dash.Dash(__name__, server=server, suppress_callback_exceptions=True)
 app.title = "Dashboard de Reclamações"
-load_dotenv()
 
 # Palavra-chave para autenticação
 ACCESS_KEY = os.getenv("ACCESS_KEY")  # Pode ser configurada no .env
