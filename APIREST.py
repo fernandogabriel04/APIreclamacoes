@@ -21,7 +21,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # Inicializa o modelo Whisper (ou pode ser chamado quando necessário)
-modelo_whisper = whisper.load_model("turbo")
+modelo_whisper = whisper.load_model("base")
 apikey = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=apikey)
 
