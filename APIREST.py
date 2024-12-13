@@ -9,6 +9,9 @@ from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import pytz
+import soundfile as sf
+import numpy as np
+import librosa
 
 app = Flask(__name__)
 
@@ -66,6 +69,22 @@ def download_audio(audio_url):
     else:
         raise Exception(f"Falha ao baixar o áudio: {response.status_code}")
 
+# Função para pré-processar o áudio
+def pre_processar_audio(arquivo_audio):
+    # Carregar o áudio usando librosa
+    audio, sr = librosa.load(arquivo_audio, sr=None)  # sr=None mantém a taxa de amostragem original
+    
+    # Normalizar o volume do áudio
+    audio = audio / np.max(np.abs(audio))  # Normaliza o volume
+
+    # Remover ruído usando um filtro simples (pode ser aprimorado com outras técnicas)
+    audio = librosa.effects.preemphasis(audio)  # Aplica preênfase para ajudar a reduzir ruído
+
+    # Salvar o áudio pré-processado
+    temp_file = "temp_preprocessed_audio.wav"
+    sf.write(temp_file, audio, sr)  # Salva o áudio pré-processado
+    return temp_file
+
 # Rota para receber reclamações
 @app.route('/api/reclamacoes', methods=['POST'])
 def receber_reclamacao():
@@ -85,12 +104,16 @@ def receber_reclamacao():
         with open("temp_input_audio.wav", "wb") as f:
             f.write(audio_data)
         
-        transcricao = transcrever_audio("temp_input_audio.wav")
+        # Pré-processa o áudio
+        arquivo_audio_processado = pre_processar_audio("temp_input_audio.wav")
+        
+        transcricao = transcrever_audio(arquivo_audio_processado)
         transcricao = corrigir_transcricao(transcricao)
         relatorio = gerar_relatorio_detalhado(transcricao)
         salvar_dados(transcricao, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro)
         
         os.remove("temp_input_audio.wav")
+        os.remove(arquivo_audio_processado)  # Remove o áudio pré-processado
         return jsonify({"status": "Reclamação de áudio processada e salva."})
     
     else:
