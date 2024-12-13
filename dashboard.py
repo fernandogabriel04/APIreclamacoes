@@ -54,19 +54,34 @@ def generate_wordcloud(text):
 
 # Layout da página de login
 login_layout = html.Div([
-    html.Img(
+    html.Div([  # Contêiner para centralizar o conteúdo
+        html.Img(
             src="https://raiox.maceio.al.gov.br//assets/images/logo.svg",
-            style={"justifyContent": "center","textAlign": "center", "height": "200px", "marginTop": "20px"}
+            style={"height": "200px", "marginBottom": "10px"}
         ),
-    html.H2("Acesso ao Dashboard", style={"textAlign": "center", "marginTop": "20px"}),
-    html.Div([
-        html.Label("Palavra-chave:"),
-        dcc.Input(id="access-key", type="password", placeholder="Digite a palavra-chave", style={"padding": "10px", "borderRadius": "5px", "width": "100%", "marginBottom": "10px"}),
-        html.Button("Entrar", id="login-button", n_clicks=0, style={"justifyContent": "center", "textAlign": "center", "backgroundColor": "#007bff", "color": "white", "width": "100%", "padding": "10px", "borderRadius": "5px"}),
-        html.Div(id="login-message", style={"justifyContent": "center","marginTop": "10px", "color": "red", "textAlign": "left"})
-    ], style={"justifyContent": "center","textAlign": "center","width": "300px", "margin": "0 auto"})
-], style={"alignItems": "center", "justifyContent": "center","textAlign": "center", "margin": "0 auto"})
-
+        html.H2("DASHBOARD OUVIDORIA", style={"fontFamily": "Amsi, Helvetica, Arial, sans-serif","textAlign": "center", "marginBottom": "20px", "color": "white"}),
+        html.Div([
+            html.Label("Palavra-chave:", style={"textAlign": "left", "marginBottom": "5px", "color": "white"}),
+            dcc.Input(id="access-key", type="password", placeholder="Digite a palavra-chave", style={
+                "padding": "10px", "borderRadius": "5px", "width": "100%", "marginBottom": "20px", "boxSizing": "border-box", "backgroundColor": "#00325C", "border": "2px solid white"
+            }),
+            html.Button("Entrar", id="login-button", n_clicks=0, style={
+                "backgroundColor": "#007bff", "color": "white", "width": "100%", "padding": "10px", "borderRadius": "5px", "fontWeight": "bold", "border": "none"
+            }),
+            html.Div(id="login-message", style={
+                "marginTop": "10px", "color": "red", "textAlign": "center", "fontSize": "14px"
+            })
+        ], style={"width": "300px", "textAlign": "center"})
+    ], style={"textAlign": "center"})  # Centraliza o conteúdo
+], style={
+    "display": "flex",
+    "flexDirection": "column",
+    "justifyContent": "center",
+    "alignItems": "center",
+    "minHeight": "100vh",
+    "backgroundColor": "#00325C",
+    "padding": "20px"
+})
 # Layout do dashboard
 def dashboard_layout():
     return html.Div([
