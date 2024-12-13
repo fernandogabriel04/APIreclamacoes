@@ -8,6 +8,13 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, session
 from dash.exceptions import PreventUpdate
+from wordcloud import WordCloud
+from io import BytesIO
+import base64
+from nltk.corpus import stopwords
+import nltk
+
+nltk.download('stopwords')
 
 load_dotenv()
 # Configuração do app Dash e Flask
@@ -35,6 +42,15 @@ def search_data(df, keyword):
     if keyword:
         df = df[df['resumo'].str.contains(keyword, case=False, na=False)]
     return df
+
+# Função para gerar uma imagem de nuvem de palavras
+def generate_wordcloud(text):
+    custom_stopwords = set(stopwords.words("portuguese")).union({"reclamação", "pessoa", "prefeito", "serviço"})
+    wordcloud = WordCloud(width=800, height=400, background_color="white", stopwords=custom_stopwords).generate(text)
+    img = BytesIO()
+    wordcloud.to_image().save(img, format="PNG")
+    img.seek(0)
+    return base64.b64encode(img.read()).decode("utf-8")
 
 # Layout da página de login
 login_layout = html.Div([
@@ -113,7 +129,13 @@ def dashboard_layout():
                 dcc.Graph(id="grafico-top-bairros", style={"marginTop": "20px"})
             ], style={"width": "50%", "display": "inline-block"})
         ]),
-
+        
+        # Nuvem de palavras
+        html.Div([
+            html.H3("Nuvem de Palavras", style={"marginTop": "30px", "textAlign": "center", "color": "#00325C"}),
+            html.Img(id="wordcloud-image", style={"display": "block", "margin": "0 auto"})
+        ]),
+        
         # Tabela de dados
         html.Div([
             html.H3("Tabela de Reclamações", style={"marginTop": "30px", "textAlign": "center", "color": "#00325C"}),
@@ -147,6 +169,7 @@ def dashboard_layout():
                 ]
             )
         ]),
+        
         # Footer
         html.Footer(
             html.Div([
@@ -198,12 +221,14 @@ def update_filtros(_):
      Output("grafico-bairros", "figure"),
      Output("grafico-mensal", "figure"),
      Output("grafico-top-bairros", "figure"),
-     Output("tabela-dados", "data")],
+     Output("tabela-dados", "data"),
+     Output("wordcloud-image", "src")],
     [Input("ano-dropdown", "value"),
      Input("categoria-dropdown", "value"),
      Input("bairro-dropdown", "value"),
      Input("search-box", "value")]
 )
+
 def update_dashboard(ano, categoria, bairro, keyword):
     if not session.get("authenticated"):
         raise PreventUpdate
@@ -255,8 +280,18 @@ def update_dashboard(ano, categoria, bairro, keyword):
         labels={"bairro": "Bairro", "total": "Total"},
         color="bairro"
     )
+    
+    # Gerar tabela
+    tabela_dados = df.to_dict("records")
+    
+    # Gerar nuvem de palavras
+    if not df.empty:
+        text = " ".join(df["resumo"].dropna())
+        wordcloud_src = "data:image/png;base64,{}".format(generate_wordcloud(text))
+    else:
+        wordcloud_src = None
 
-    return grafico_categorias, grafico_bairros, grafico_mensal, grafico_top_bairros, df.to_dict("records")
+    return grafico_categorias, grafico_bairros, grafico_mensal, grafico_top_bairros, tabela_dados, wordcloud_src
 
 if __name__ == '__main__':
     app.run_server(debug=False, host="0.0.0.0", port=8050)
