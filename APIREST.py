@@ -95,29 +95,42 @@ def receber_reclamacao():
     if tipo == "texto":
         reclamacao_texto = data.get("reclamacao")
         relatorio = gerar_relatorio_detalhado(reclamacao_texto)
+        
+        if "error" in relatorio:  # Se o retorno for um erro, já retorna a mensagem de erro
+            return jsonify(relatorio), 400
+        
         salvar_dados(reclamacao_texto, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro)
         return jsonify({"status": "Reclamação de texto processada e salva."})
     
     elif tipo == "audio":
         audio_url = data.get("audio_url")
-        audio_data = download_audio(audio_url)
-        with open("temp_input_audio.wav", "wb") as f:
-            f.write(audio_data)
-        
-        # Pré-processa o áudio
-        arquivo_audio_processado = pre_processar_audio("temp_input_audio.wav")
-        
-        transcricao = transcrever_audio(arquivo_audio_processado)
-        transcricao = corrigir_transcricao(transcricao)
-        relatorio = gerar_relatorio_detalhado(transcricao)
-        salvar_dados(transcricao, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro)
-        
-        os.remove("temp_input_audio.wav")
-        os.remove(arquivo_audio_processado)  # Remove o áudio pré-processado
-        return jsonify({"status": "Reclamação de áudio processada e salva."})
-    
+        try:
+            audio_data = download_audio(audio_url)
+            with open("temp_input_audio.wav", "wb") as f:
+                f.write(audio_data)
+            
+            # Pré-processa o áudio
+            arquivo_audio_processado = pre_processar_audio("temp_input_audio.wav")
+            
+            transcricao = transcrever_audio(arquivo_audio_processado)
+            transcricao = corrigir_transcricao(transcricao)
+            relatorio = gerar_relatorio_detalhado(transcricao)
+            
+            if "error" in relatorio:  # Se o retorno for um erro, já retorna a mensagem de erro
+                return jsonify(relatorio), 400
+            
+            salvar_dados(transcricao, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro)
+                
+            return jsonify({"status": "Reclamação de áudio processada e salva."})
+        finally:
+            # Remove os arquivos temporários
+            if os.path.exists("temp_input_audio.wav"):
+                os.remove("temp_input_audio.wav")
+            if os.path.exists("temp_preprocessed_audio.wav"):
+                os.remove("temp_preprocessed_audio.wav")
     else:
         return jsonify({"error": "Tipo inválido. Use 'texto' ou 'audio'."}), 400
+            
 
 def transcrever_audio(arquivo_audio):
     resultado = modelo_whisper.transcribe(arquivo_audio)
@@ -143,6 +156,11 @@ def gerar_relatorio_detalhado(texto):
         f"Subcategoria: <subcategoria>\n"
         f"Tema: <tema>\n"
         f"Resumo: <resumo>\n\n"
+        f"Se não houver informações claras ou a reclamação não se encaixar em nenhuma categoria/subcategoria ou tema, utilize as seguintes respostas padrões:\n"
+        f"Categoria: 'Sem categoria'\n"
+        f"Subcategoria: 'Sem subcategoria'\n"
+        f"Tema: 'Sem tema'\n"
+        f"Resumo: 'Sem resumo'"
     )
     prompt = (
             "Para cada texto, siga estas etapas: "
@@ -164,12 +182,22 @@ def gerar_relatorio_detalhado(texto):
     
     partes = {part.split(": ")[0].strip(): part.split(": ")[1].strip() for part in relatorio.split("\n") if ": " in part}
     print(f"Partes extraídas: {partes}")
+    categoria = partes.get("Categoria", "Sem categoria").strip()
+    subcategoria = partes.get("Subcategoria", "Sem subcategoria").strip()
+    tema = partes.get("Tema", "Sem tema").strip()
+    resumo = partes.get("Resumo", "Sem resumo").strip()
+    
+    # Verificar se algum campo tem os valores padrão "Sem categoria", "Sem subcategoria", "Sem tema", ou "Sem resumo"
+    if categoria == "Sem categoria" or subcategoria == "Sem subcategoria" or tema == "Sem tema" or resumo == "Sem resumo":
+        
+        return {"error": "A ocorrência precisa ser referente ao município."}
+
     
     return {
-        "categoria": partes.get("Categoria", ""),
-        "subcategoria": partes.get("Subcategoria", ""),
-        "tema": partes.get("Tema", ""),
-        "resumo": partes.get("Resumo", "")
+        "categoria": categoria,
+        "subcategoria": subcategoria,
+        "tema": tema,
+        "resumo": resumo
     }
     
 # Endpoint para obter relatórios
