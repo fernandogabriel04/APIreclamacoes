@@ -41,12 +41,13 @@ class Registro(Base):
     resumo = Column(Text, nullable=False)
     data_hora = Column(DateTime, default=lambda: datetime.now(pytz.timezone('America/Sao_Paulo')))
     bairro = Column(String, nullable=False)
+    origem = Column(String, nullable=False)
 
 # Criação da tabela no banco de dados
 Base.metadata.create_all(bind=engine)
 
 # Função para salvar dados no banco usando SQLAlchemy
-def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro):
+def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro, origem):
     session = SessionLocal()
     novo_registro = Registro(
         transcricao=transcricao,
@@ -54,7 +55,8 @@ def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro):
         subcategoria=subcategoria,
         tema=tema,
         resumo=resumo,
-        bairro=bairro
+        bairro=bairro,
+        origem=origem
     )
     session.add(novo_registro)
     session.commit()
@@ -85,12 +87,21 @@ def pre_processar_audio(arquivo_audio):
     sf.write(temp_file, audio, sr)  # Salva o áudio pré-processado
     return temp_file
 
+
+BAIRROS_VALIDOS = ["Antares", "Bebedouro", "Benedito Bentes", "Bom Parto", "Canaã", "Centro", "Chã da Jaqueira", "Chã de Bebedouro", "Cidade Universitária", "Clima Bom", "Cruz das Almas", "Eustáquio Gomes", "Farol", "Fernão Velho", "Feitosa", "Garça Torta", "Gruta de Lourdes", "Guaxuma", "Ipioca", "Jacarecica", "Jacintinho", "Jardim Petrópolis", "Jaraguá", "Jatiúca", "Levada", "Mangabeiras", "Mutange", "Pajuçara", "Pinheiro", "Pontal da Barra", "Poço", "Ponta Verde", "Prado", "Riacho Doce", "Rio Novo", "Santa Lúcia", "São Jorge", "Serraria", "Tabuleiro do Martins", "Trapiche da Barra", "Vergel do Lago"]
+ORIGENS_VALIDAS = ["Whatsapp", "Cabine Antares", "Cabine Bebedouro", "Cabine Benedito Bentes", "Cabine Bom Parto", "Cabine Canaã", "Cabine Centro", "Cabine Chã da Jaqueira", "Cabine Chã de Bebedouro", "Cabine Cidade Universitária", "Cabine Clima Bom", "Cabine Cruz das Almas", "Cabine Eustáquio Gomes", "Cabine Farol", "Cabine Fernão Velho", "Cabine Feitosa", "Cabine Garça Torta", "Cabine Gruta de Lourdes", "Cabine Guaxuma", "Cabine Ipioca", "Cabine Jacarecica", "Cabine Jacintinho", "Cabine Jardim Petrópolis", "Cabine Jaraguá", "Cabine Jatiúca", "Cabine Levada", "Cabine Mangabeiras", "Cabine Mutange", "Cabine Pajuçara", "Cabine Pinheiro", "Cabine Pontal da Barra", "Cabine Poço", "Cabine Ponta Verde", "Cabine Prado", "Cabine Riacho Doce", "Cabine Rio Novo", "Cabine Santa Lúcia", "Cabine São Jorge", "Cabine Serraria", "Cabine Tabuleiro do Martins", "Cabine Trapiche da Barra", "Cabine Vergel do Lago"]
+
 # Rota para receber reclamações
 @app.route('/api/reclamacoes', methods=['POST'])
 def receber_reclamacao():
     data = request.json
     tipo = data.get("tipo")
     bairro = data.get("localizacao")
+    origem = data.get("origem", "Indefinida")
+    
+
+    if bairro not in BAIRROS_VALIDOS or origem not in ORIGENS_VALIDAS:
+        return jsonify({"error": "Bairro ou origem inválidos."}), 400
 
     if tipo == "texto":
         reclamacao_texto = data.get("reclamacao")
@@ -99,7 +110,7 @@ def receber_reclamacao():
         if "error" in relatorio:  # Se o retorno for um erro, já retorna a mensagem de erro
             return jsonify(relatorio), 400
         
-        salvar_dados(reclamacao_texto, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro)
+        salvar_dados(reclamacao_texto, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro, origem)
         return jsonify({"status": "Reclamação de texto processada e salva."})
     
     elif tipo == "audio":
@@ -119,7 +130,7 @@ def receber_reclamacao():
             if "error" in relatorio:  # Se o retorno for um erro, já retorna a mensagem de erro
                 return jsonify(relatorio), 400
             
-            salvar_dados(transcricao, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro)
+            salvar_dados(transcricao, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro, origem)
                 
             return jsonify({"status": "Reclamação de áudio processada e salva."})
         finally:
@@ -199,29 +210,6 @@ def gerar_relatorio_detalhado(texto):
         "tema": tema,
         "resumo": resumo
     }
-    
-# Endpoint para obter relatórios
-@app.route('/api/reclamacoes/relatorios', methods=['GET'])
-def consultar_reclamacoes():
-    session = SessionLocal()
-    registros = session.query(Registro).all()
-    session.close()
-
-    relatorios = []
-    for r in registros:
-        relatorios.append({
-            "id": r.id,
-            "transcricao": r.transcricao,
-            "categoria": r.categoria,
-            "subcategoria": r.subcategoria,
-            "tema": r.tema,
-            "resumo": r.resumo,
-            "data_hora": r.data_hora.strftime('%d/%m/%Y %H:%M:%S'),
-            "bairro": r.bairro
-        })
-
-    return jsonify(relatorios)
-
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
