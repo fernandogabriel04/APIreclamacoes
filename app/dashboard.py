@@ -32,7 +32,7 @@ engine = create_engine(DATABASE_URL)
 
 # Função para buscar dados do banco de dados
 def fetch_data():
-    query = "SELECT id, categoria, subcategoria, bairro, resumo, data_hora FROM registros"
+    query = "SELECT id, origem, categoria, subcategoria, bairro, resumo, data_hora FROM registros"
     df = pd.read_sql(query, engine)
     df["data_hora"] = pd.to_datetime(df["data_hora"])  # Garantir formato datetime
     return df
@@ -102,6 +102,12 @@ def dashboard_layout():
                 html.Label("Filtrar por Ano:", style={"fontWeight": "bold"}),
                 dcc.Dropdown(id="ano-dropdown", placeholder="Selecione um ano",
                              style={"width": "100%", "padding": "3px", "borderRadius": "5px", "backgroundColor": "#f9f9f9"})
+            ], style={"flex": "1 1 200px", "padding": "10px"}),
+            
+            html.Div([
+                html.Label("Filtrar por Origem:", style={"fontWeight": "bold"}),
+                dcc.Dropdown(id="origem-dropdown", placeholder="Selecione uma origem",
+                            style={"width": "100%", "padding": "3px", "borderRadius": "5px", "backgroundColor": "#f9f9f9"})
             ], style={"flex": "1 1 200px", "padding": "10px"}),
 
             html.Div([
@@ -216,6 +222,7 @@ def handle_authentication(login_clicks, access_key):
 # Callback para atualizar os filtros
 @app.callback(
     [Output("ano-dropdown", "options"),
+     Output("origem-dropdown", "options"),
      Output("categoria-dropdown", "options"),
      Output("bairro-dropdown", "options")],
     [Input("main-layout", "children")]
@@ -226,9 +233,10 @@ def update_filtros(_):
 
     df = fetch_data()
     anos = [{"label": str(ano), "value": str(ano)} for ano in df["data_hora"].dt.year.unique()]
+    origens = [{"label": origem, "value": origem} for origem in df["origem"].dropna().unique()]
     categorias = [{"label": cat, "value": cat} for cat in df["categoria"].unique()]
     bairros = [{"label": bairro, "value": bairro} for bairro in df["bairro"].unique()]
-    return anos, categorias, bairros
+    return anos, origens, categorias, bairros
 
 # Callback para atualizar gráficos e tabela com a opção de busca por palavra-chave
 @app.callback(
@@ -239,12 +247,13 @@ def update_filtros(_):
      Output("tabela-dados", "data"),
      Output("wordcloud-image", "src")],
     [Input("ano-dropdown", "value"),
+     Input("origem-dropdown", "value"),
      Input("categoria-dropdown", "value"),
      Input("bairro-dropdown", "value"),
      Input("search-box", "value")]
 )
 
-def update_dashboard(ano, categoria, bairro, keyword):
+def update_dashboard(ano, origem, categoria, bairro, keyword):
     if not session.get("authenticated"):
         raise PreventUpdate
 
@@ -253,6 +262,8 @@ def update_dashboard(ano, categoria, bairro, keyword):
     # Aplicar filtros básicos
     if ano:
         df = df[df["data_hora"].dt.year == int(ano)]
+    if origem:
+        df = df[df["origem"] == origem]
     if categoria:
         df = df[df["categoria"] == categoria]
     if bairro:
