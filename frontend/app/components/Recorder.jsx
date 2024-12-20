@@ -101,7 +101,7 @@ const Recorder = () => {
 
     if (!navigator.geolocation) {
       alert("Geolocalização não suportada pelo navegador.");
-      setBairro("Geolocalização não suportada");
+      setShowSelect(true);
       return;
     }
 
@@ -114,11 +114,8 @@ const Recorder = () => {
         setLoading(false); // Desativa carregamento
       },
       (error) => {
-        console.error("Erro ao acessar localização:", error);
-        alert(
-          "Não foi possível acessar sua localização. Por favor, configure manualmente."
-        );
-        setBairro("Bairro não configurado");
+        console.error("Erro ao acessar localização, selecione o bairro da Cabine:", error);
+        setShowSelect(true); // Mostra o select se houver erro ao obter localização
         setLoading(false); // Desativa carregamento
       }
     );
