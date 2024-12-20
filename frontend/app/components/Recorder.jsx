@@ -182,7 +182,7 @@ const Recorder = () => {
         audio_url: fileIoResult.link,
         tipo: "audio",
         localizacao: bairro,
-        // origem: "Cabine " + bairro,
+        origem: "Cabine " + bairro,
       };
 
     console.log("Payload enviado para a API:", payload);
