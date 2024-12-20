@@ -20,7 +20,7 @@ load_dotenv()
 # Configuração do app Dash e Flask
 server = Flask(__name__)
 server.secret_key = os.getenv("SECRET_KEY")  # Chave para gerenciar sessões no Flask
-app = dash.Dash(__name__, server=server, suppress_callback_exceptions=True)
+app = dash.Dash(__name__, requests_pathname_prefix="/dashboard/", routes_pathname_prefix="/dashboard/", server=server, suppress_callback_exceptions=True)
 app.title = "Dashboard de Reclamações"
 
 # Palavra-chave para autenticação
