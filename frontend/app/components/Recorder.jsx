@@ -5,6 +5,7 @@ import React, { useState, useRef, useEffect } from "react";
 const Recorder = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [bairro, setBairro] = useState("Carregando localização...");
   const [bairrosDisponiveis] = useState([
     "Antares",
@@ -155,6 +156,8 @@ const Recorder = () => {
   const uploadAudio = async () => {
     if (!audioBlob) return;
 
+    setIsProcessing(true);
+
     const formData = new FormData();
     formData.append("file", audioBlob, "audio.wav");
 
@@ -205,6 +208,9 @@ const Recorder = () => {
     } catch (error) {
       console.error("Erro ao enviar áudio:", error);
       alert("Houve algum erro. Leia as instruções e tente novamente.");
+      window.location.reload();
+    } finally {
+      setIsProcessing(false); // Desativa o estado de processamento
     }
   };
 
@@ -212,7 +218,7 @@ const Recorder = () => {
     <div className="flex flex-col items-center justify-center w-full flex-grow bg-gray-100">
       {loading && <p>Carregando localização...</p>}
       <h2 className="mb-4 text-lg font-bold text-gray-800">Cabine {bairro}</h2>
-
+  
       {showSelect && (
         <div className="flex flex-col items-center">
           <label htmlFor="bairros" className="text-gray-600 mb-2">
@@ -235,7 +241,7 @@ const Recorder = () => {
           </select>
         </div>
       )}
-
+  
       {!showSelect && (
         <button
           onClick={isRecording ? stopRecording : startRecording}
@@ -246,7 +252,7 @@ const Recorder = () => {
           {isRecording ? "Parar" : "Gravar"}
         </button>
       )}
-
+  
       {audioBlob && (
         <div className="mt-6 flex flex-col items-center">
           <h3 className="text-lg text-gray-600 mb-4">Pré-visualizar áudio:</h3>
@@ -257,14 +263,19 @@ const Recorder = () => {
           />
           <button
             onClick={uploadAudio}
-            className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+            disabled={isProcessing} // Desativa o botão quando está processando
+            className={`mt-4 px-4 py-2 rounded-lg transition-colors ${
+              isProcessing
+                ? "bg-gray-500 text-white cursor-not-allowed"
+                : "bg-blue-500 text-white hover:bg-blue-600"
+            }`}
           >
-            Enviar Áudio
+            {isProcessing ? "Processando..." : "Enviar Áudio"}
           </button>
         </div>
       )}
     </div>
-  );
+  );  
 };
 
 export default Recorder;
