@@ -10,13 +10,13 @@ const Instrucoes = () => {
       <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-600 mb-2 text-justify">
         O aúdio precisa ser referente ao município de Maceió, estamos aqui para te ouvir!
       </p>
-      <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-600 mb-2 text-justify">
+      <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-600 mb-2 text-center">
         1. Clique no botão <span className="text-green-500 font-semibold">"Gravar"</span> para iniciar a gravação.
       </p>
-      <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-600 mb-2 text-justify">
+      <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-600 mb-2 text-center">
         2. Após finalizar a gravação, clique no botão <span className="text-red-500 font-semibold">"Parar"</span>.
       </p>
-      <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-600 mb-2 text-justify">
+      <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-600 mb-2 text-center">
         3. Você poderá ouvir o áudio gravado e enviá-lo clicando no botão <span className="text-blue-500 font-semibold">"Enviar Áudio"</span>.
       </p>
     </div>
