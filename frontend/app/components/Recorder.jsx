@@ -54,7 +54,34 @@ const Recorder = () => {
   const [loading, setLoading] = useState(false); // Indica carregamento
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
+  const [isPlaying, setIsPlaying] = useState(false);
 
+  const playAudioWithWebAudio = async (blob) => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+      const source = audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioContext.destination);
+
+      source.start(0);
+      source.onended = () => {
+        setIsPlaying(false); // Atualiza o estado quando o áudio termina
+      };
+
+      setIsPlaying(true);
+    } catch (error) {
+      console.error("Erro ao reproduzir áudio com Web Audio API:", error);
+    }
+  };
+
+  const handlePlayAudio = () => {
+    if (audioBlob) {
+      playAudioWithWebAudio(audioBlob);
+    }
+  };
   const getBairroFromCoordinates = async (latitude, longitude) => {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`;
     try {
@@ -256,12 +283,15 @@ const Recorder = () => {
       {audioBlob && (
         <div className="mt-6 flex flex-col items-center">
           <h3 className="text-lg text-gray-600 mb-4">Pré-visualizar áudio:</h3>
-          <audio
-            controls
-            src={URL.createObjectURL(audioBlob)}
-            type="audio/wav"
-            className="w-64"
-          />
+          {audioBlob && (
+            <button
+              onClick={handlePlayAudio}
+              disabled={isPlaying}
+              className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              {isPlaying ? "Reproduzindo..." : "Reproduzir Áudio"}
+            </button>
+          )}
           <button
             onClick={uploadAudio}
             disabled={isProcessing} // Desativa o botão quando está processando
