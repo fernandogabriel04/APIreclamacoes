@@ -160,6 +160,10 @@ def corrigir_transcricao(texto):
     return response.choices[0].message.content.strip()
 
 def gerar_relatorio_detalhado(texto):
+    # Validação do texto de entrada
+    if not texto or len(texto.strip()) < 20:  # Verifica se o texto tem menos de 30 caracteres
+        return {"error": "A ocorrência precisa ser referente ao município."}
+    
     instructions = (
         f"Você é um assistente que classifica textos de denúncias/reclamações direcionados a secretaria municipal de Maceió."
         f"Responda no formato: "
@@ -167,7 +171,7 @@ def gerar_relatorio_detalhado(texto):
         f"Subcategoria: <subcategoria>\n"
         f"Tema: <tema>\n"
         f"Resumo: <resumo>\n\n"
-        f"Se não houver informações claras ou a reclamação não se encaixar em nenhuma categoria/subcategoria ou tema, utilize as seguintes respostas padrões:\n"
+        f"Se o texto fornecido não houver informações claras ou não for referente a uma reclamação/ocorrência/feedback, utilize as seguintes respostas padrões:\n"
         f"Categoria: 'Sem categoria'\n"
         f"Subcategoria: 'Sem subcategoria'\n"
         f"Tema: 'Sem tema'\n"
@@ -179,14 +183,15 @@ def gerar_relatorio_detalhado(texto):
             "2. Dentro da categoria escolhida, atribua uma subcategoria entre as opções: Vagas para Sepultamento, Indicação de Descarte Irregular, Falta de Coleta Domiciliar, Poda de Árvore, Supressão de Árvore, Capinação, Limpeza em Geral, Tapar Buraco, Implantação de Asfalto, Manutenção de Vias não Pavimentadas, Alagamento, Afundamento, Limpeza de Boca de Lobo, Marcação de Exames Consultas e Cirurgias, Unidade de Saúde, Atendimento Médico, Ônibus, Tempo de Viagem, Linhas, Integração, Terminais, Abrigos, VAMU (Cartão de Transporte), Acessibilidade em Transporte. Se for necessário crie uma subcategoria condizente com o texto. "
             "3. Identifique o tema principal do texto. "
             "4. Crie um resumo objetivo baseado no conteúdo da reclamação. "
-            f"Agora analise o seguinte texto e realize o processo: {texto}"
+            f"Agora analise o seguinte texto e realize o processo: '{texto}'"
               )
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": instructions},
             {"role": "user", "content": prompt}
-        ]
+        ],
+        
     )
     relatorio = response.choices[0].message.content
     print(f"Relatório gerado: {relatorio}")
