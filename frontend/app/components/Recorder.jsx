@@ -259,6 +259,7 @@ const Recorder = () => {
           <audio
             controls
             src={URL.createObjectURL(audioBlob)}
+            type="audio/wav"
             className="w-64"
           />
           <button
