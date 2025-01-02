@@ -45,7 +45,7 @@ def search_data(df, keyword):
 
 # Função para gerar uma imagem de nuvem de palavras
 def generate_wordcloud(text):
-    custom_stopwords = set(stopwords.words("portuguese")).union({"reclamação", "pessoa", "prefeito", "serviço"})
+    custom_stopwords = set(stopwords.words("portuguese")).union({"reclamação", "pessoa", "prefeito", "serviço", "Solicitação", "Munícipe"})
     wordcloud = WordCloud(width=800, height=400, background_color="white", stopwords=custom_stopwords).generate(text)
     img = BytesIO()
     wordcloud.to_image().save(img, format="PNG")
