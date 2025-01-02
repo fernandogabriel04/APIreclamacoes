@@ -1,8 +1,8 @@
 import '../styles/globals.css';
 
 export const metadata = {
-    title: 'Sistema de Reclamações',
-    description: 'Interface para gravação de áudios e envio para o servidor',
+    title: 'Sistema de Ouvidoria',
+    description: 'Sistema de Ouvidoria população de Maceió',
   };
   
   export default function RootLayout({ children }) {
