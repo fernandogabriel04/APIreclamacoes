@@ -105,6 +105,11 @@ def receber_reclamacao():
 
     if tipo == "texto":
         reclamacao_texto = data.get("reclamacao")
+        
+        # Verifica tamanho do texto
+        if len(reclamacao_texto) > 800:
+            return jsonify({"error": "O texto excede o limite de 800 caracteres."}), 400
+        
         relatorio = gerar_relatorio_detalhado(reclamacao_texto)
         
         if "error" in relatorio:  # Se o retorno for um erro, já retorna a mensagem de erro
@@ -119,6 +124,14 @@ def receber_reclamacao():
             audio_data = download_audio(audio_url)
             with open("temp_input_audio.wav", "wb") as f:
                 f.write(audio_data)
+                
+            # Verificar duração do áudio
+            try:
+                duration = librosa.get_duration(filename="temp_input_audio.wav")
+                if duration > 60:  # 60 segundos = 1 minuto
+                    return jsonify({"error": "O áudio excede o limite de 1 minuto."}), 400
+            except Exception as e:
+                return jsonify({"error": f"Erro ao processar o áudio: {str(e)}"}), 400
             
             # Pré-processa o áudio
             arquivo_audio_processado = pre_processar_audio("temp_input_audio.wav")
