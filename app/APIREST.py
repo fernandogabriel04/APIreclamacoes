@@ -24,7 +24,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # Inicializa o modelo Whisper (ou pode ser chamado quando necessário)
-modelo_whisper = whisper.load_model("base")
+modelo_whisper = whisper.load_model("small")
 apikey = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=apikey)
 
@@ -97,7 +97,7 @@ def receber_reclamacao():
     data = request.json
     tipo = data.get("tipo")
     bairro = data.get("localizacao")
-    origem = data.get("origem", "Indefinida")
+    origem = data.get("origem")
     
 
     if bairro not in BAIRROS_VALIDOS or origem not in ORIGENS_VALIDAS:
@@ -144,7 +144,7 @@ def receber_reclamacao():
             
 
 def transcrever_audio(arquivo_audio):
-    resultado = modelo_whisper.transcribe(arquivo_audio)
+    resultado = modelo_whisper.transcribe(arquivo_audio, language='pt', task='transcribe', fp16=False)
     return resultado['text']
 
 def corrigir_transcricao(texto):
@@ -165,13 +165,13 @@ def gerar_relatorio_detalhado(texto):
         return {"error": "A ocorrência precisa ser referente ao município."}
     
     instructions = (
-        f"Você é um assistente que classifica textos de denúncias/reclamações direcionados a secretaria municipal de Maceió."
+        f"Você é um assistente que classifica textos de denúncias/reclamações direcionados a uma prefeitura."
         f"Responda no formato: "
         f"Categoria: <categoria>\n"
         f"Subcategoria: <subcategoria>\n"
         f"Tema: <tema>\n"
         f"Resumo: <resumo>\n\n"
-        f"Se o texto fornecido não houver informações claras ou não for referente a uma reclamação/ocorrência/feedback, utilize as seguintes respostas padrões:\n"
+        f"Se o texto NÃO estiver relacionado a problemas ou sugestões para melhorias no município, utilize as seguintes respostas padrões:\n"
         f"Categoria: 'Sem categoria'\n"
         f"Subcategoria: 'Sem subcategoria'\n"
         f"Tema: 'Sem tema'\n"
