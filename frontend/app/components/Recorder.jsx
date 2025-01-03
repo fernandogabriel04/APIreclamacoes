@@ -52,8 +52,10 @@ const Recorder = () => {
   ]);
   const [showSelect, setShowSelect] = useState(false);
   const [loading, setLoading] = useState(false); // Indica carregamento
+  const [recordingTime, setRecordingTime] = useState(0);
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
+  const timerRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const playAudioWithWebAudio = async (blob) => {
@@ -153,6 +155,26 @@ const Recorder = () => {
     getLocationAndSetBairro();
   }, []);
 
+  // Contador
+  useEffect(() => {
+    if (isRecording) {
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prevTime) => {
+          if (prevTime >= 60) {
+            stopRecording();
+            alert("O limite de gravação de 1 minuto foi atingido.");
+            return prevTime;
+          }
+          return prevTime + 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+
+    return () => clearInterval(timerRef.current);
+  }, [isRecording]);
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -170,14 +192,23 @@ const Recorder = () => {
 
       mediaRecorder.current.start();
       setIsRecording(true);
+      setRecordingTime(0);
     } catch (error) {
       alert("Erro ao acessar o microfone: " + error.message);
     }
   };
 
   const stopRecording = () => {
-    mediaRecorder.current.stop();
+    if (mediaRecorder.current) {
+      mediaRecorder.current.stop();
+    }
     setIsRecording(false);
+  };
+
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
   };
 
   const uploadAudio = async () => {
@@ -244,7 +275,7 @@ const Recorder = () => {
   return (
     <div className="flex flex-col items-center justify-center w-full flex-grow bg-gray-100">
       {loading && <p>Carregando localização...</p>}
-      <h2 className="mb-4 text-lg font-bold text-gray-800">Cabine {bairro}</h2>
+      <h2 className="mb-4 text-lg font-bold text-gray-800"> {bairro !== "Carregando localização..." && bairro ? `Cabine ${bairro}` : "Carregando localização..."}</h2>
   
       {showSelect && (
         <div className="flex flex-col items-center">
@@ -270,6 +301,7 @@ const Recorder = () => {
       )}
   
       {!showSelect && (
+        <>
         <button
           onClick={isRecording ? stopRecording : startRecording}
           className={`w-60 h-60 rounded-full flex items-center justify-center text-white ${
@@ -278,6 +310,10 @@ const Recorder = () => {
         >
           {isRecording ? "Parar" : "Gravar"}
         </button>
+        <p className="mt-4 text-lg text-gray-700">
+        Tempo de gravação: {formatTime(recordingTime)}
+        </p>
+        </>
       )}
   
       {audioBlob && (
