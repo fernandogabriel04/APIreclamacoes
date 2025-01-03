@@ -174,7 +174,7 @@ def corrigir_transcricao(texto):
 
 def gerar_relatorio_detalhado(texto):
     # Validação do texto de entrada
-    if not texto or len(texto.strip()) < 20:  # Verifica se o texto tem menos de 30 caracteres
+    if not texto or len(texto.strip()) < 20:  # Verifica se o texto tem menos de 20 caracteres
         return {"error": "A ocorrência precisa ser referente ao município."}
     
     instructions = (
@@ -192,8 +192,8 @@ def gerar_relatorio_detalhado(texto):
     )
     prompt = (
             "Para cada texto, siga estas etapas: "
-            "1. Classifique o texto em uma das seguintes categorias principais: Meio Ambiente, Educação, Fazenda, Infraestrutura, Limpeza Urbana, Turismo, Saúde, Transporte. "
-            "2. Dentro da categoria escolhida, atribua uma subcategoria entre as opções: Vagas para Sepultamento, Indicação de Descarte Irregular, Falta de Coleta Domiciliar, Poda de Árvore, Supressão de Árvore, Capinação, Limpeza em Geral, Tapar Buraco, Implantação de Asfalto, Manutenção de Vias não Pavimentadas, Alagamento, Afundamento, Limpeza de Boca de Lobo, Marcação de Exames Consultas e Cirurgias, Unidade de Saúde, Atendimento Médico, Ônibus, Tempo de Viagem, Linhas, Integração, Terminais, Abrigos, VAMU (Cartão de Transporte), Acessibilidade em Transporte. Se for necessário crie uma subcategoria condizente com o texto. "
+            "1. Classifique o texto em uma das seguintes categorias principais: Meio Ambiente, Educação, Infraestrutura, Limpeza Urbana, Turismo, Saúde, Transporte. "
+            "2. Dentro da categoria escolhida, atribua uma subcategoria entre as opções: Vagas para Sepultamento, Indicação de Descarte Irregular, Falta de Coleta Domiciliar, Poda de Árvore, Supressão de Árvore, Reflorestamento e Plantio, Capinação, Limpeza em Geral, Tapar Buraco, Implantação de Asfalto, Manutenção de Vias não Pavimentadas, Alagamento, Limpeza de Boca de Lobo, Marcação de Exames Consultas e Cirurgias, Unidade de Saúde, Atendimento Médico, Transporte Público, Tempo de Viagem, Linhas de Ônibus, Integração, Terminais, Abrigos, VAMU (Cartão de Transporte), Acessibilidade em Transporte, Iluminação Pública, Acessibilidade, Esgoto, Manutenção de Praças e Parques, Controle de Fluxo Viário. Se for necessário crie uma subcategoria condizente com o texto. "
             "3. Identifique o tema principal do texto. "
             "4. Crie um resumo objetivo baseado no conteúdo da reclamação. "
             f"Agora analise o seguinte texto e realize o processo: '{texto}'"
