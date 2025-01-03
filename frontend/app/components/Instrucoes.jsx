@@ -8,6 +8,7 @@ const Instrucoes = () => {
         Certifique-se de que o microfone está funcionando corretamente antes de começar.
       </p>
       <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-600 mb-2 text-justify">
+      Você terá até <span className="text-gray-700 font-semibold">1 minuto</span> para gravar o seu áudio.
         O aúdio precisa ser referente ao município de Maceió, estamos aqui para te ouvir!
       </p>
       <p className="text-sm md:text-base lg:text-lg xl:text-xl text-gray-600 mb-2 text-center">
