@@ -168,7 +168,7 @@ def corrigir_transcricao(texto):
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "system", "content": instructions},
-                  {"role": "user", "content": prompt}]
+                  {"role": "user", "content": prompt}],
     )
     return response.choices[0].message.content.strip()
 
@@ -204,6 +204,7 @@ def gerar_relatorio_detalhado(texto):
             {"role": "system", "content": instructions},
             {"role": "user", "content": prompt}
         ],
+        max_tokens=10000,
         
     )
     relatorio = response.choices[0].message.content
