@@ -204,7 +204,6 @@ def gerar_relatorio_detalhado(texto):
             {"role": "system", "content": instructions},
             {"role": "user", "content": prompt}
         ],
-        max_tokens=10000,
         
     )
     relatorio = response.choices[0].message.content
