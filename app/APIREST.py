@@ -177,7 +177,7 @@ def corrigir_transcricao(texto):
 
 def gerar_relatorio_detalhado(texto):
     # Validação do texto de entrada
-    if not texto or len(texto.strip()) < 20:  # Verifica se o texto tem menos de 20 caracteres
+    if not texto or len(texto.strip()) < 20 or texto == "👩‍⚕️ Pronto Atendimento":  # Verifica se o texto tem menos de 20 caracteres
         return {"error": "A ocorrência precisa ser referente ao município."}
     
     instructions = (
