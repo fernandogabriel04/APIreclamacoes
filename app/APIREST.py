@@ -42,12 +42,13 @@ class Registro(Base):
     data_hora = Column(DateTime, default=lambda: datetime.now(pytz.timezone('America/Sao_Paulo')))
     bairro = Column(String, nullable=False)
     origem = Column(String, nullable=False)
+    telefone = Column(String(20), nullable=True)
 
 # Criação da tabela no banco de dados
 Base.metadata.create_all(bind=engine)
 
 # Função para salvar dados no banco usando SQLAlchemy
-def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro, origem):
+def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro, origem, telefone):
     session = SessionLocal()
     novo_registro = Registro(
         transcricao=transcricao,
@@ -56,7 +57,8 @@ def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro, ori
         tema=tema,
         resumo=resumo,
         bairro=bairro,
-        origem=origem
+        origem=origem,
+        telefone=telefone
     )
     session.add(novo_registro)
     session.commit()
@@ -98,6 +100,7 @@ def receber_reclamacao():
     tipo = data.get("tipo")
     bairro = data.get("localizacao")
     origem = data.get("origem")
+    telefone = data.get("telefone")
     
 
     if bairro not in BAIRROS_VALIDOS or origem not in ORIGENS_VALIDAS:
@@ -115,7 +118,7 @@ def receber_reclamacao():
         if "error" in relatorio:  # Se o retorno for um erro, já retorna a mensagem de erro
             return jsonify(relatorio), 400
         
-        salvar_dados(reclamacao_texto, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro, origem)
+        salvar_dados(reclamacao_texto, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro, origem, telefone)
         return jsonify({"status": "Reclamação de texto processada e salva."})
     
     elif tipo == "audio":
@@ -143,7 +146,7 @@ def receber_reclamacao():
             if "error" in relatorio:  # Se o retorno for um erro, já retorna a mensagem de erro
                 return jsonify(relatorio), 400
             
-            salvar_dados(transcricao, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro, origem)
+            salvar_dados(transcricao, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro, origem, telefone)
                 
             return jsonify({"status": "Reclamação de áudio processada e salva."})
         finally:
