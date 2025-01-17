@@ -220,7 +220,7 @@ def gerar_relatorio_detalhado(texto):
     resumo = partes.get("Resumo", "Sem resumo").strip()
     
     # Verificar se algum campo tem os valores padrão "Sem categoria", "Sem subcategoria", "Sem tema", ou "Sem resumo"
-    if categoria == "Sem categoria" or subcategoria == "Sem subcategoria" or tema == "Sem tema" or resumo == "Sem resumo":
+    if categoria == "Sem categoria" or subcategoria == "Sem subcategoria" or tema == "Sem tema" or resumo == "Sem resumo" or categoria == "'Sem categoria'" or subcategoria == "'Sem subcategoria'" or tema == "'Sem tema'" or resumo == "'Sem resumo'":
         
         return {"error": "A ocorrência precisa ser referente ao município."}
 
