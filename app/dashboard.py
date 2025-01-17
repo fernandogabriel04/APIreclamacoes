@@ -21,7 +21,7 @@ load_dotenv()
 server = Flask(__name__)
 server.secret_key = os.getenv("SECRET_KEY")  # Chave para gerenciar sessões no Flask
 app = dash.Dash(__name__, requests_pathname_prefix="/dashboard/", routes_pathname_prefix="/dashboard/", server=server, suppress_callback_exceptions=True)
-app.title = "Dashboard de Reclamações"
+app.title = "Dashboard Ouvidoria"
 
 # Palavra-chave para autenticação
 ACCESS_KEY = os.getenv("ACCESS_KEY")  # Pode ser configurada no .env
@@ -91,7 +91,7 @@ def dashboard_layout():
                 style={"height": "60px", "marginRight": "20px"}
             ),
             html.H1(
-                "Dashboard de Reclamações",
+                "Dashboard Ouvidoria",
                 style={"fontFamily": "Amsi, Helvetica, Arial, sans-serif", "color": "#00325C", "display": "inline", "verticalAlign": "middle"}
             )
         ], style={"textAlign": "center", "display": "flex", "alignItems": "center", "justifyContent": "center", "backgroundColor": "#f9f9f9"}),
@@ -159,7 +159,7 @@ def dashboard_layout():
         
         # Tabela de dados
         html.Div([
-            html.H3("Tabela de Reclamações", style={"marginTop": "30px", "textAlign": "center", "color": "#00325C"}),
+            html.H3("Tabela de Feedback", style={"marginTop": "30px", "textAlign": "center", "color": "#00325C"}),
             dash_table.DataTable(
                 id="tabela-dados",
                 columns=[
@@ -284,13 +284,13 @@ def update_dashboard(ano, origem, categoria, bairro, keyword):
     # Filtrar por palavra-chave
     df = search_data(df, keyword)
 
-    # Gráfico de reclamações por categoria
-    grafico_categorias = px.pie(df, names="categoria", title="Reclamações por Categoria")
+    # Gráfico de Feedback por categoria
+    grafico_categorias = px.pie(df, names="categoria", title="Feedback por Categoria")
 
-    # Gráfico de reclamações por bairro (barras horizontais)
-    grafico_bairros = px.pie(df, names="bairro", title="Reclamações por Bairro")
+    # Gráfico de Feedback por bairro (barras horizontais)
+    grafico_bairros = px.pie(df, names="bairro", title="Feedback por Bairro")
 
-    # Gráfico de reclamações por mês
+    # Gráfico de Feedback por mês
     df["mes"] = df["data_hora"].dt.to_period("M").astype(str)  # Formato 'YYYY-MM'
 
     # Agrupamento por mês e contagem
@@ -303,7 +303,7 @@ def update_dashboard(ano, origem, categoria, bairro, keyword):
         df_mensal,
         x="mes",
         y="total",
-        title="Reclamações por Mês",
+        title="Feedback por Mês",
         labels={"mes": "Mês", "total": "Total"}
     )
 
@@ -314,7 +314,7 @@ def update_dashboard(ano, origem, categoria, bairro, keyword):
     top_bairros = df["bairro"].value_counts().nlargest(5).reset_index()
     top_bairros.columns = ["bairro", "total"]
     grafico_top_bairros = px.bar(
-        top_bairros, x="bairro", y="total", title="Top 5 Bairros com Mais Reclamações",
+        top_bairros, x="bairro", y="total", title="Top 5 Bairros com Mais Feedback",
         labels={"bairro": "Bairro", "total": "Total"},
         color="bairro"
     )
