@@ -212,7 +212,7 @@ def gerar_relatorio_detalhado(texto):
     relatorio = response.choices[0].message.content
     print(f"Relatório gerado: {relatorio}")
     
-    partes = {part.split(": ")[0].strip(): part.split(": ")[1].strip() for part in relatorio.split("\n") if ": " in part}
+    partes = {part.split(": ")[0].strip(): part.split(": ")[1].strip("'\"") for part in relatorio.split("\n") if ": " in part}
     print(f"Partes extraídas: {partes}")
     categoria = partes.get("Categoria", "Sem categoria").strip()
     subcategoria = partes.get("Subcategoria", "Sem subcategoria").strip()
@@ -220,8 +220,10 @@ def gerar_relatorio_detalhado(texto):
     resumo = partes.get("Resumo", "Sem resumo").strip()
     
     # Verificar se algum campo tem os valores padrão "Sem categoria", "Sem subcategoria", "Sem tema", ou "Sem resumo"
-    if categoria == "Sem categoria" or subcategoria == "Sem subcategoria" or tema == "Sem tema" or resumo == "Sem resumo" or categoria == "'Sem categoria'" or subcategoria == "'Sem subcategoria'" or tema == "'Sem tema'" or resumo == "'Sem resumo'":
-        
+    if categoria.lower() in ["sem categoria", "'sem categoria'", '"sem categoria"'] or \
+       subcategoria.lower() in ["sem subcategoria", "'sem subcategoria'", '"sem subcategoria"'] or \
+       tema.lower() in ["sem tema", "'sem tema'", '"sem tema"'] or \
+       resumo.lower() in ["sem resumo", "'sem resumo'", '"sem resumo"']:
         return {"error": "A ocorrência precisa ser referente ao município."}
 
     
