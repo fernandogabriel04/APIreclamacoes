@@ -288,7 +288,14 @@ def update_dashboard(ano, origem, categoria, bairro, keyword):
     grafico_categorias = px.pie(df, names="categoria", title="Feedback por Categoria")
 
     # Gráfico de Feedback por bairro (barras horizontais)
-    grafico_bairros = px.pie(df, names="bairro", title="Feedback por Bairro")
+    grafico_bairros = px.treemap(
+        df['bairro'].value_counts().reset_index(name='count'),
+        path=['bairro'],  # Nomes dos bairros
+        values='count',  # Quantidade de Feedback
+        title="Feedback por Bairro",
+        color='count',  # Coloração baseada na quantidade
+        color_continuous_scale='Blues'
+    )
 
     # Gráfico de Feedback por mês
     df["mes"] = df["data_hora"].dt.to_period("M").astype(str)  # Formato 'YYYY-MM'
