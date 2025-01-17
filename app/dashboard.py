@@ -32,7 +32,7 @@ engine = create_engine(DATABASE_URL)
 
 # Função para buscar dados do banco de dados
 def fetch_data():
-    query = "SELECT id, origem, categoria, subcategoria, bairro, resumo, data_hora FROM registros"
+    query = "SELECT id, origem, categoria, subcategoria, bairro, resumo, data_hora, telefone FROM registros"
     df = pd.read_sql(query, engine)
     df["data_hora"] = pd.to_datetime(df["data_hora"])  # Garantir formato datetime
     return df
@@ -168,7 +168,8 @@ def dashboard_layout():
                     {"name": "Subcategoria", "id": "subcategoria"},
                     {"name": "Bairro", "id": "bairro"},
                     {"name": "Resumo", "id": "resumo"},
-                    {"name": "Data/Hora", "id": "data_hora"}
+                    {"name": "Data/Hora", "id": "data_hora"},
+                    {"name": "Telefone", "id": "telefone"},
                 ],
                 style_table={'overflowX': 'auto'},
                 style_header={
@@ -201,23 +202,34 @@ def dashboard_layout():
     ])
 
 # Definir layout inicial como página de login
-app.layout = html.Div(id="main-layout", children=login_layout)
+app.layout = html.Div(id="main-layout", children=[
+    dcc.Store(id="access-key-store", storage_type="local"),  # Armazena no LocalStorage
+    html.Div(id="page-content", children=login_layout)
+])
 
-# Callback unificado para autenticação
 @app.callback(
-    Output("main-layout", "children"),
-    [Input("login-button", "n_clicks")],
+    [Output("page-content", "children"),
+     Output("access-key-store", "data")],  # Salva a palavra-chave no LocalStorage
+    [Input("login-button", "n_clicks"),
+     Input("access-key-store", "data")],  # Recupera a palavra-chave do LocalStorage
     [State("access-key", "value")]
 )
-def handle_authentication(login_clicks, access_key):
-    if not dash.callback_context.triggered:
-        raise PreventUpdate
+def manage_authentication(login_clicks, stored_key, access_key):
+    ctx = dash.callback_context  # Contexto do callback
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
 
-    if login_clicks and access_key == ACCESS_KEY:
-        session["authenticated"] = True  # Define a sessão como autenticada
-        return dashboard_layout()
-    else:
-        return html.Div([login_layout, html.Div("Palavra-chave inválida.", style={"color": "red", "textAlign": "center"})])
+    # Caso o valor já esteja no LocalStorage
+    if stored_key and trigger_id == "access-key-store" and stored_key == ACCESS_KEY:
+        session["authenticated"] = True
+        return dashboard_layout(), stored_key
+
+    # Caso o botão de login seja pressionado
+    if trigger_id == "login-button" and login_clicks and access_key == ACCESS_KEY:
+        session["authenticated"] = True
+        return dashboard_layout(), ACCESS_KEY
+
+    # Caso contrário, retorna a tela de login
+    return login_layout, None
 
 # Callback para atualizar os filtros
 @app.callback(
@@ -275,7 +287,7 @@ def update_dashboard(ano, origem, categoria, bairro, keyword):
     # Gráfico de reclamações por categoria
     grafico_categorias = px.pie(df, names="categoria", title="Reclamações por Categoria")
 
-    # Gráfico de reclamações por bairro
+    # Gráfico de reclamações por bairro (barras horizontais)
     grafico_bairros = px.pie(df, names="bairro", title="Reclamações por Bairro")
 
     # Gráfico de reclamações por mês
@@ -308,6 +320,7 @@ def update_dashboard(ano, origem, categoria, bairro, keyword):
     )
     
     # Gerar tabela
+    df = df.sort_values(by="id", ascending=True)  # Ordena pelo campo "id" em ordem crescente
     tabela_dados = df.to_dict("records")
     
     # Gerar nuvem de palavras
