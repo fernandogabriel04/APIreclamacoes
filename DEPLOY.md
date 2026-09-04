@@ -41,9 +41,12 @@ python -c "import secrets; print('PAINEL_SENHA =', secrets.token_urlsafe(24))"
 
 1. No mesmo projeto: **New** → **GitHub Repo** → selecione `APIreclamacoes`.
 2. **Settings** do serviço:
-   - **Root Directory**: `app`
+   - **Root Directory**: `app`  ← **obrigatório**. Sem isso o Railway tenta
+     buildar o repositório inteiro (que também tem o frontend Node) e falha.
    - **Healthcheck Path**: `/health`
-   - Start command: já vem do `app/Procfile` (Nixpacks detecta Python + `runtime.txt`).
+   - Build: o Railway usa o **`app/Dockerfile`** automaticamente (imagem
+     `python:3.11-slim` + gunicorn). O `Procfile`/`runtime.txt` ficam só como
+     fallback para outros hosts (Render etc.).
 3. **Variables** (aba Variables do serviço):
 
    | Variável | Valor |
