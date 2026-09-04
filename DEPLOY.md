@@ -54,11 +54,14 @@ python -c "import secrets; print('PAINEL_SENHA =', secrets.token_urlsafe(24))"
    | `DB_URL` | `${{Postgres.DATABASE_URL}}` (referência ao serviço Postgres) |
    | `OPENAI_API_KEY` | `sk-proj-...` |
    | `ACCESS_KEY` | o gerado no passo 0 |
+   | `PORT` | `8080` |
    | `MODELO_TRANSCRICAO` | `gpt-4o-transcribe` (ou `gpt-4o-mini-transcribe` p/ economizar) |
    | `MODELO_CLASSIFICACAO` | `gpt-4o-mini` |
    | `CORS_ORIGINS` | `*` por enquanto (troca no passo 4) |
 
-4. **Settings → Networking → Generate Domain** → anote `https://<servico>.up.railway.app`.
+4. **Settings → Networking → Generate Domain** → quando pedir a porta, informe
+   **`8080`** (o Dockerfile faz `EXPOSE 8080` e o gunicorn escuta em `$PORT`).
+   Anote `https://<servico>.up.railway.app`.
 5. A tabela `registros` é criada sozinha no primeiro boot (`create_all`). Confira:
    `curl https://<servico>.up.railway.app/health` → `{"ok":true}`.
 6. *(Opcional)* dados de demonstração:
@@ -70,7 +73,9 @@ python -c "import secrets; print('PAINEL_SENHA =', secrets.token_urlsafe(24))"
 ## 3. Frontend — Next.js na Vercel
 
 1. https://vercel.com → **Add New → Project** → importe `APIreclamacoes`.
-2. **Root Directory**: `frontend` (framework detectado: Next.js).
+2. **Root Directory**: `frontend` (framework detectado: Next.js 16).
+   - **Node.js Version** (Settings → General): **20.x ou 22.x** — o Next 16 exige
+     Node ≥ 20.9. O padrão da Vercel já é 22.x; só confira se não está travado no 18.
 3. **Environment Variables** (Production + Preview):
 
    | Variável | Valor |
