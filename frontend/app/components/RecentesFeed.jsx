@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 const POR_TELA = 4;
 const TROCA_MS = 7000;
 const ATUALIZA_MS = 60000;
+const LIMITE_BUSCA = 50; // trava no backend também — só as últimas 50, não o histórico inteiro
 
 function tempoRelativo(iso) {
   if (!iso) return "";
@@ -27,7 +28,9 @@ export default function RecentesFeed() {
     let ativo = true;
     const url = (() => {
       try {
-        return new URL("/api/manifestacoes-recentes", process.env.NEXT_PUBLIC_API_URL).toString();
+        const u = new URL("/api/manifestacoes-recentes", process.env.NEXT_PUBLIC_API_URL);
+        u.searchParams.set("limite", String(LIMITE_BUSCA));
+        return u.toString();
       } catch {
         return null;
       }
@@ -95,7 +98,7 @@ export default function RecentesFeed() {
               </span>
             </div>
             <p className="mt-2 line-clamp-3 text-sm font-medium leading-snug text-slate-700">
-              “{m.resumo}”
+              “{m.texto}”
             </p>
             <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-laranja">
               {m.municipio}

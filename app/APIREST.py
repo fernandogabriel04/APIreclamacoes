@@ -3,6 +3,8 @@ from flask_cors import CORS
 from datetime import datetime, timezone
 import json
 import os
+import re
+import unicodedata
 from openai import OpenAI
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
@@ -239,14 +241,49 @@ def receber_reclamacao():
     return jsonify({"status": "Manifestação recebida. Obrigado por falar com o JHC!"})
             
 
-# Rota pública: últimas manifestações, só com campos seguros (sem telefone nem
-# transcrição). Usada no mural das cabines físicas.
+# Palavras filtradas no mural público (raiz sem acento, minúscula, comparação
+# por palavra inteira — não por substring, pra não pegar "cuzinho" dentro de
+# outra palavra qualquer nem falsos positivos).
+_PALAVROES = {
+    "caralho", "porra", "merda", "cacete", "foda", "fodase", "foder",
+    "fodendo", "fodido", "fodida", "puta", "putas", "puto", "putos",
+    "putaria", "putinha", "piroca", "pica", "picas", "buceta", "bucetas",
+    "cuzao", "cuzona", "arrombado", "arrombada", "desgracado", "desgracada",
+    "bosta", "bostas", "escroto", "escrota", "safado", "safada", "corno",
+    "corna", "fdp", "pqp", "vsf", "krl", "viadagem", "cornagem",
+}
+
+
+def _sem_acento(s):
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn"
+    )
+
+
+def filtrar_palavroes(texto):
+    """Troca palavrões por asteriscos (mantendo a 1ª letra), preservando o
+    resto da frase como foi falado."""
+    if not texto:
+        return texto
+
+    def _trocar(m):
+        palavra = m.group(0)
+        if _sem_acento(palavra).lower() in _PALAVROES:
+            return palavra[0] + "*" * (len(palavra) - 1)
+        return palavra
+
+    return re.sub(r"[A-Za-zÀ-ÿ]+", _trocar, texto)
+
+
+# Rota pública: últimas manifestações com o texto literal da transcrição (sem
+# telefone), filtrando palavrões. Usada no mural das cabines físicas.
+# Limite travado em 50 pra não puxar o histórico inteiro nem pesar a página.
 @app.get("/api/manifestacoes-recentes")
 def manifestacoes_recentes():
     try:
-        limite = min(max(int(request.args.get("limite", 24)), 1), 40)
+        limite = min(max(int(request.args.get("limite", 50)), 1), 50)
     except (TypeError, ValueError):
-        limite = 24
+        limite = 50
 
     session = SessionLocal()
     try:
@@ -261,7 +298,7 @@ def manifestacoes_recentes():
                 "municipio": r.municipio,
                 "bairro": r.bairro,
                 "categoria": r.categoria,
-                "resumo": r.resumo,
+                "texto": filtrar_palavroes(r.transcricao) or r.resumo,
                 "data_hora": r.data_hora.isoformat() if r.data_hora else None,
             }
             for r in registros
