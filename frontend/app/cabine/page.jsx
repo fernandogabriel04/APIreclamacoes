@@ -4,6 +4,7 @@ import React, { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import MarcaOuvidoria from "../components/MarcaOuvidoria";
 import GravadorAudio from "../components/GravadorAudio";
+import RecentesFeed from "../components/RecentesFeed";
 import { normalizarMunicipio } from "../lib/municipios";
 
 /**
@@ -51,14 +52,18 @@ function CabineInterna() {
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
-        <div className="w-full max-w-xl">
-          <h1 className="titulo-cartaz text-center text-4xl text-white sm:text-5xl">
-            Fale com o <span className="texto-vazado">JHC</span>
+      <div className="mx-auto grid w-full max-w-5xl flex-1 items-center gap-8 px-4 py-10 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-10">
+        {/* Coluna da ação */}
+        <div className="w-full">
+          <h1 className="titulo-cartaz text-4xl leading-[0.95] text-white sm:text-5xl">
+            O que você quer em
+            <span className="texto-vazado mt-1 block text-5xl sm:text-6xl">
+              Toda Alagoas?
+            </span>
           </h1>
-          <p className="mt-3 text-center font-medium text-azul-50/90">
+          <p className="mt-4 font-medium text-azul-50/90">
             Toque em <span className="font-extrabold text-amarelo">Gravar</span> e conte, em até
-            1 minuto, o que você quer para {municipio} e para Alagoas.
+            1 minuto, o que você espera para {municipio} e para o estado.
           </p>
 
           <div className="mt-8 rounded-3xl border-4 border-amarelo bg-white p-6 shadow-bloco sm:p-8">
@@ -71,10 +76,15 @@ function CabineInterna() {
             />
           </div>
 
-          <p className="mt-6 text-center text-xs font-medium text-azul-300">
+          <p className="mt-6 text-xs font-medium text-azul-300">
             Canal de escuta da campanha. Não substitui os serviços de emergência (190, 192, 193).
           </p>
         </div>
+
+        {/* Mural das manifestações recebidas */}
+        <aside className="w-full">
+          <RecentesFeed />
+        </aside>
       </div>
     </main>
   );

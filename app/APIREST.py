@@ -239,6 +239,37 @@ def receber_reclamacao():
     return jsonify({"status": "Manifestação recebida. Obrigado por falar com o JHC!"})
             
 
+# Rota pública: últimas manifestações, só com campos seguros (sem telefone nem
+# transcrição). Usada no mural das cabines físicas.
+@app.get("/api/manifestacoes-recentes")
+def manifestacoes_recentes():
+    try:
+        limite = min(max(int(request.args.get("limite", 24)), 1), 40)
+    except (TypeError, ValueError):
+        limite = 24
+
+    session = SessionLocal()
+    try:
+        registros = (
+            session.query(Registro)
+            .order_by(Registro.id.desc())
+            .limit(limite)
+            .all()
+        )
+        return jsonify([
+            {
+                "municipio": r.municipio,
+                "bairro": r.bairro,
+                "categoria": r.categoria,
+                "resumo": r.resumo,
+                "data_hora": r.data_hora.isoformat() if r.data_hora else None,
+            }
+            for r in registros
+        ])
+    finally:
+        session.close()
+
+
 # Rota de leitura para o painel de acompanhamento das manifestações
 @app.route('/api/registros', methods=['GET'])
 def listar_registros():
