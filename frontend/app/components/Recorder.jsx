@@ -1,348 +1,182 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { MUNICIPIOS_ALAGOAS, normalizarMunicipio } from "../lib/municipios";
+import GravadorAudio from "./GravadorAudio";
 
 const Recorder = () => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [bairro, setBairro] = useState("Carregando localização...");
-  const [bairrosDisponiveis] = useState([
-    "Antares",
-    "Bebedouro",
-    "Benedito Bentes",
-    "Bom Parto",
-    "Canaã",
-    "Centro",
-    "Chã da Jaqueira",
-    "Chã de Bebedouro",
-    "Cidade Universitária",
-    "Clima Bom",
-    "Cruz das Almas",
-    "Eustáquio Gomes",
-    "Farol",
-    "Fernão Velho",
-    "Feitosa",
-    "Garça Torta",
-    "Gruta de Lourdes",
-    "Guaxuma",
-    "Ipioca",
-    "Jacarecica",
-    "Jacintinho",
-    "Jardim Petrópolis",
-    "Jaraguá",
-    "Jatiúca",
-    "Levada",
-    "Mangabeiras",
-    "Mutange",
-    "Pajuçara",
-    "Pinheiro",
-    "Pontal da Barra",
-    "Poço",
-    "Ponta Verde",
-    "Prado",
-    "Riacho Doce",
-    "Rio Novo",
-    "Santa Lúcia",
-    "São Jorge",
-    "Serraria",
-    "Tabuleiro do Martins",
-    "Trapiche da Barra",
-    "Vergel do Lago",
-  ]);
-  const [showSelect, setShowSelect] = useState(false);
-  const [loading, setLoading] = useState(false); // Indica carregamento
-  const [recordingTime, setRecordingTime] = useState(0);
-  const mediaRecorder = useRef(null);
-  const audioChunks = useRef([]);
-  const timerRef = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [municipio, setMunicipio] = useState(null);
+  const [bairro, setBairro] = useState("");
+  const [etapaLocal, setEtapaLocal] = useState("carregando"); // carregando | confirmar | escolher | pronto
+  const [sugestao, setSugestao] = useState(null);
 
-  const playAudioWithWebAudio = async (blob) => {
+  const definirMunicipio = useCallback((nome) => {
+    setMunicipio(nome);
     try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const arrayBuffer = await blob.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
-
-      source.start(0);
-      source.onended = () => {
-        setIsPlaying(false); // Atualiza o estado quando o áudio termina
-      };
-
-      setIsPlaying(true);
-    } catch (error) {
-      console.error("Erro ao reproduzir áudio com Web Audio API:", error);
-    }
-  };
-
-  const handlePlayAudio = () => {
-    if (audioBlob) {
-      playAudioWithWebAudio(audioBlob);
-    }
-  };
-  const getBairroFromCoordinates = async (latitude, longitude) => {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`;
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-      const bairro =
-        data.address.suburb ||
-        data.address.neighbourhood ||
-        "Bairro não identificado";
-      return bairro;
-    } catch (error) {
-      console.error("Erro ao buscar bairro:", error);
-      return "Erro ao identificar bairro";
-    }
-  };
-
-  const confirmarOuAlterarBairro = async (bairroObtido) => {
-    const confirmacao = window.confirm(
-      `Você está em "${bairroObtido}". Deseja confirmar este bairro?`
-    );
-
-    if (confirmacao) {
-      setBairro(bairroObtido);
-      localStorage.setItem("bairro", bairroObtido);
-    } else {
-      setShowSelect(true); // Mostra o select
-    }
-  };
-
-  const handleBairroSelecionado = (event) => {
-    const bairroEscolhido = event.target.value;
-    if (bairroEscolhido) {
-      setBairro(bairroEscolhido);
-      localStorage.setItem("bairro", bairroEscolhido);
-      setShowSelect(false); // Esconde o select após a seleção
-    }
-  };
-
-  const getLocationAndSetBairro = async () => {
-    const storedBairro = localStorage.getItem("bairro");
-    if (storedBairro) {
-      setBairro(storedBairro);
-      return;
-    }
-
-    if (!navigator.geolocation) {
-      alert("Geolocalização não suportada pelo navegador.");
-      setShowSelect(true);
-      return;
-    }
-
-    setLoading(true); // Ativa carregamento
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        const bairroObtido = await getBairroFromCoordinates(latitude, longitude);
-        confirmarOuAlterarBairro(bairroObtido);
-        setLoading(false); // Desativa carregamento
-      },
-      (error) => {
-        console.error("Erro ao acessar localização, selecione o bairro da Cabine:", error);
-        setShowSelect(true); // Mostra o select se houver erro ao obter localização
-        setLoading(false); // Desativa carregamento
-      }
-    );
-  };
-
-  useEffect(() => {
-    getLocationAndSetBairro();
+      localStorage.setItem("municipio", nome);
+    } catch {}
+    setEtapaLocal("pronto");
   }, []);
 
-  // Contador
+  const resolverMunicipioPorCoordenadas = async (lat, lon) => {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=pt-BR`;
+    const resp = await fetch(url, { headers: { Accept: "application/json" } });
+    const data = await resp.json();
+    const a = data.address || {};
+    const bruto =
+      a.city || a.town || a.municipality || a.village || a.county || null;
+    return normalizarMunicipio(bruto);
+  };
+
   useEffect(() => {
-    if (isRecording) {
-      timerRef.current = setInterval(() => {
-        setRecordingTime((prevTime) => {
-          if (prevTime >= 60) {
-            stopRecording();
-            alert("O limite de gravação de 1 minuto foi atingido.");
-            return prevTime;
+    let salvo = null;
+    try {
+      salvo = localStorage.getItem("municipio");
+      setBairro(localStorage.getItem("bairro") || "");
+    } catch {}
+    if (salvo && MUNICIPIOS_ALAGOAS.includes(salvo)) {
+      setMunicipio(salvo);
+      setEtapaLocal("pronto");
+      return;
+    }
+    if (!navigator.geolocation) {
+      setEtapaLocal("escolher");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const encontrado = await resolverMunicipioPorCoordenadas(
+            pos.coords.latitude,
+            pos.coords.longitude
+          );
+          if (encontrado) {
+            setSugestao(encontrado);
+            setEtapaLocal("confirmar");
+          } else {
+            setEtapaLocal("escolher");
           }
-          return prevTime + 1;
-        });
-      }, 1000);
-    } else {
-      clearInterval(timerRef.current);
-    }
-
-    return () => clearInterval(timerRef.current);
-  }, [isRecording]);
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder.current = new MediaRecorder(stream);
-
-      mediaRecorder.current.ondataavailable = (event) => {
-        audioChunks.current.push(event.data);
-      };
-
-      mediaRecorder.current.onstop = () => {
-        const blob = new Blob(audioChunks.current, { type: "audio/wav" });
-        setAudioBlob(blob);
-        audioChunks.current = [];
-      };
-
-      mediaRecorder.current.start();
-      setIsRecording(true);
-      setRecordingTime(0);
-    } catch (error) {
-      alert("Erro ao acessar o microfone: " + error.message);
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorder.current) {
-      mediaRecorder.current.stop();
-    }
-    setIsRecording(false);
-  };
-
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
-  };
-
-  const uploadAudio = async () => {
-    if (!audioBlob) return;
-
-    setIsProcessing(true);
-
-    const formData = new FormData();
-    formData.append("file", audioBlob, "audio.wav");
-
-    try {
-      const fileIoResponse = await fetch("https://file.io", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!fileIoResponse.ok) {
-        throw new Error("Falha ao fazer upload para file.io");
-      }
-
-      const fileIoResult = await fileIoResponse.json();
-      console.log("Resposta do file.io:", fileIoResult);
-
-      if (!fileIoResult.success) {
-        throw new Error("Upload para file.io falhou.");
-      }
-
-      const payload = {
-        audio_url: fileIoResult.link,
-        tipo: "audio",
-        localizacao: bairro,
-        origem: "Cabine " + bairro,
-      };
-
-    console.log("Payload enviado para a API:", payload);
-
-      const apiResponse = await fetch(process.env.NEXT_PUBLIC_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!apiResponse.ok) {
-        const errorData = await apiResponse.json();
-        console.error("Erro da API:", errorData);
-        alert(errorData.error || "Erro ao enviar áudio.");
-        return;
-      }
-
-      const result = await apiResponse.json();
-      alert(result.status || "Áudio enviado com sucesso!");
-      window.location.reload();
-    } catch (error) {
-      console.error("Erro ao enviar áudio:", error);
-      alert("Houve algum erro. Leia as instruções e tente novamente.");
-      window.location.reload();
-    } finally {
-      setIsProcessing(false); // Desativa o estado de processamento
-    }
-  };
+        } catch {
+          setEtapaLocal("escolher");
+        }
+      },
+      () => setEtapaLocal("escolher"),
+      { timeout: 10000 }
+    );
+  }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full flex-grow bg-gray-100">
-      {loading && <p>Carregando localização...</p>}
-      <h2 className="mb-4 text-lg font-bold text-gray-800"> {bairro !== "Carregando localização..." && bairro ? `Cabine ${bairro}` : "Carregando localização..."}</h2>
-  
-      {showSelect && (
-        <div className="flex flex-col items-center">
-          <label htmlFor="bairros" className="text-gray-600 mb-2">
-            Escolha o bairro:
-          </label>
-          <select
-            id="bairros"
-            onChange={handleBairroSelecionado}
-            className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            defaultValue=""
-          >
-            <option value="" disabled>
-              Selecione um bairro
-            </option>
-            {bairrosDisponiveis.map((bairro) => (
-              <option key={bairro} value={bairro}>
-                {bairro}
-              </option>
-            ))}
-          </select>
+    <section id="gravar" className="bg-azul-900 py-16">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6">
+        <div className="mb-8 text-center">
+          <span className="inline-block -rotate-1 bg-amarelo px-3 py-1 text-xs font-extrabold uppercase tracking-[0.2em] text-azul-900">
+            Sua manifestação
+          </span>
+          <h2 className="titulo-cartaz mt-4 text-4xl text-white sm:text-5xl">
+            Grave seu <span className="texto-vazado">áudio</span>
+          </h2>
         </div>
-      )}
-  
-      {!showSelect && (
-        <>
-        <button
-          onClick={isRecording ? stopRecording : startRecording}
-          className={`w-60 h-60 rounded-full flex items-center justify-center text-white ${
-            isRecording ? "bg-red-500" : "bg-green-500"
-          } shadow-lg hover:scale-110 transition-transform duration-200`}
-        >
-          {isRecording ? "Parar" : "Gravar"}
-        </button>
-        <p className="mt-4 text-lg text-gray-700">
-        Tempo de gravação: {formatTime(recordingTime)}
-        </p>
-        </>
-      )}
-  
-      {audioBlob && (
-        <div className="mt-6 flex flex-col items-center">
-          <h3 className="text-lg text-gray-600 mb-4">Pré-visualizar áudio:</h3>
-          {audioBlob && (
-            <button
-              onClick={handlePlayAudio}
-              disabled={isPlaying}
-              className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              {isPlaying ? "Reproduzindo..." : "Reproduzir Áudio"}
-            </button>
-          )}
-          <button
-            onClick={uploadAudio}
-            disabled={isProcessing} // Desativa o botão quando está processando
-            className={`mt-4 px-4 py-2 rounded-lg transition-colors ${
-              isProcessing
-                ? "bg-gray-500 text-white cursor-not-allowed"
-                : "bg-blue-500 text-white hover:bg-blue-600"
-            }`}
-          >
-            {isProcessing ? "Processando..." : "Enviar Áudio"}
-          </button>
+
+        <div className="rounded-3xl border-4 border-amarelo bg-white p-6 shadow-bloco sm:p-8">
+          {/* Bloco de localização */}
+          <div className="mb-6">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+              Município (Alagoas)
+            </p>
+
+            {etapaLocal === "carregando" && (
+              <p className="mt-2 animate-pulse font-semibold text-slate-500">
+                Identificando sua localização…
+              </p>
+            )}
+
+            {etapaLocal === "confirmar" && (
+              <div className="mt-2">
+                <p className="font-semibold text-azul-900">
+                  Você está em <span className="text-laranja">{sugestao}</span>?
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => definirMunicipio(sugestao)}
+                    className="rounded-lg bg-azul-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-azul-500"
+                  >
+                    Sim, confirmar
+                  </button>
+                  <button
+                    onClick={() => setEtapaLocal("escolher")}
+                    className="rounded-lg border-2 border-azul-700 px-4 py-2 text-sm font-bold text-azul-700 transition hover:bg-azul-50"
+                  >
+                    Escolher outro
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {etapaLocal === "escolher" && (
+              <select
+                defaultValue=""
+                onChange={(e) => e.target.value && definirMunicipio(e.target.value)}
+                className="mt-2 w-full rounded-lg border-2 border-slate-300 bg-white px-3 py-2.5 font-semibold text-azul-900 focus:border-azul-700 focus:outline-none"
+              >
+                <option value="" disabled>
+                  Selecione seu município
+                </option>
+                {MUNICIPIOS_ALAGOAS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {etapaLocal === "pronto" && (
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-lg font-extrabold text-azul-900">
+                  {municipio}
+                  <span className="ml-2 text-sm font-semibold text-slate-400">
+                    Alagoas
+                  </span>
+                </p>
+                <button
+                  onClick={() => setEtapaLocal("escolher")}
+                  className="text-sm font-bold text-azul-700 underline underline-offset-2"
+                >
+                  trocar
+                </button>
+              </div>
+            )}
+
+            <p className="mt-5 text-xs font-bold uppercase tracking-widest text-slate-500">
+              Bairro / povoado
+            </p>
+            <input
+              type="text"
+              value={bairro}
+              onChange={(e) => {
+                setBairro(e.target.value);
+                try {
+                  localStorage.setItem("bairro", e.target.value);
+                } catch {}
+              }}
+              placeholder="Ex.: Centro, Benedito Bentes, Povoado São José"
+              maxLength={80}
+              className="mt-2 w-full rounded-lg border-2 border-slate-300 bg-white px-3 py-2.5 font-semibold text-azul-900 focus:border-azul-700 focus:outline-none"
+            />
+            <p className="mt-1 text-xs font-medium text-slate-400">
+              O bairro, povoado ou distrito, dentro do município, a que se refere a manifestação.
+            </p>
+          </div>
+
+          <GravadorAudio
+            municipio={municipio}
+            bairro={bairro.trim()}
+            origem="Site"
+            pronto={etapaLocal === "pronto" && !!bairro.trim()}
+          />
         </div>
-      )}
-    </div>
-  );  
+      </div>
+    </section>
+  );
 };
 
 export default Recorder;

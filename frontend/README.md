@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ouvidoria JHC — Frontend
 
-## Getting Started
+Canal de escuta para o povo de Alagoas falar diretamente com JHC, candidato a
+Governador do Estado. O cidadão confirma seu **município** (dos 102 de Alagoas),
+informa o **bairro / povoado**, grava um áudio de até 1 minuto e envia. O áudio
+vai **direto para a API** (`app/APIREST.py`) por `multipart/form-data` — sem
+hosts intermediários — e lá é transcrito (`gpt-4o-transcribe`) e classificado
+(`gpt-4o-mini`, Structured Outputs) em `municipio` + `bairro` + categoria/resumo.
 
-First, run the development server:
+O gravador escolhe um formato real que o navegador suporta (WebM/Opus, MP4…) —
+o `Content-Type` `audio/wav` fixo de antes gerava arquivos corrompidos.
+
+## Stack
+
+- Next.js 15 (App Router) + React 19
+- Tailwind CSS 3
+- Fontes: Anton (display) + Barlow (texto), via `next/font`
+
+## Design system
+
+Extraído do material de campanha (`image.png`):
+
+| Token | Valor | Uso |
+| --- | --- | --- |
+| `azul-900` | `#06215C` | fundo principal |
+| `azul-700` | `#0C3AA0` | azul primário |
+| `amarelo` | `#FFCC00` | destaques, títulos vazados |
+| `laranja` | `#F26522` | chamada para ação, botão de gravar |
+
+Utilitários em `styles/globals.css`: `.titulo-cartaz`, `.texto-vazado`,
+`.faixa-cta`, `.legal-vertical`, `.corte-diagonal`.
+
+## Rodando
 
 ```bash
+cp .env.example .env.local   # ajuste NEXT_PUBLIC_API_URL
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Foto do candidato
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+O hero usa `public/jhc.png` como imagem de fundo (recorte vertical ~3:4).
+Sem o arquivo, o bloco aparece com o fundo azul do design system.
 
-## Learn More
+## Municípios
 
-To learn more about Next.js, take a look at the following resources:
+`app/lib/municipios.js` lista os 102 municípios de Alagoas e deve espelhar
+`MUNICIPIOS_ALAGOAS` em `app/APIREST.py`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Modo cabine física — `/cabine`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Para totens/cabines instalados presencialmente. Município, bairro e a
+identificação da cabine vêm da URL:
 
-## Deploy on Vercel
+```
+/cabine?municipio=Arapiraca&bairro=Centro&cabine=Praça da Matriz
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+A tela mostra só gravar / reproduzir / regravar / enviar (sem seletores). A
+`origem` gravada fica `Cabine <nome>`. A página recarrega 7s após o envio para
+ficar pronta para a próxima pessoa.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+A captação de áudio é compartilhada em `app/components/GravadorAudio.jsx` (usada
+pela home e pela cabine).
+
+## Painel de acompanhamento — `/painel`
+
+Área restrita com KPIs, gráficos (por mês, por categoria, top municípios) e
+tabela filtrável das manifestações recebidas.
+
+- O navegador nunca fala direto com a API Python: `app/painel/dados/route.js`
+  roda no servidor do Next, valida `PAINEL_SENHA` e busca
+  `GET {OUVIDORIA_API_URL}/api/registros` enviando o header
+  `X-Access-Key: {OUVIDORIA_ACCESS_KEY}` (= `ACCESS_KEY` do `app/.env`).
+- Configure `OUVIDORIA_API_URL`, `OUVIDORIA_ACCESS_KEY` e `PAINEL_SENHA` no
+  `.env.local` (veja `.env.example`).

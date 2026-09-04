@@ -1,17 +1,36 @@
-import '../styles/globals.css';
+import "../styles/globals.css";
+import { Anton, Barlow } from "next/font/google";
+
+const display = Anton({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const sans = Barlow({
+  weight: ["400", "500", "600", "700", "800"],
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 export const metadata = {
-    title: 'Sistema de Ouvidoria',
-    description: 'Sistema de Ouvidoria população de Maceió',
-  };
-  
-  export default function RootLayout({ children }) {
-    return (
-      <html lang="pt-BR">
-        <body style={{ margin: 0, fontFamily: 'Arial, sans-serif' }}>
-          {children}
-        </body>
-      </html>
-    );
-  }
-  
+  title: "Ouvidoria JHC — Governo de Alagoas",
+  description:
+    "Canal oficial para o povo de Alagoas falar diretamente com JHC. Grave seu áudio e conte o que você quer para o seu município e para o estado.",
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html
+      lang="pt-BR"
+      className={`${display.variable} ${sans.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="font-sans" suppressHydrationWarning>
+        {children}
+      </body>
+    </html>
+  );
+}

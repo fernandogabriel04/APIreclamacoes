@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
-import whisper
+from flask_cors import CORS
 from datetime import datetime
-import requests
+import json
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -9,24 +9,43 @@ from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import pytz
-import soundfile as sf
-import numpy as np
-import librosa
-
-app = Flask(__name__)
 
 load_dotenv()
 
-# Configurações de conexão com o PostgreSQL
+app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 26 * 1024 * 1024  # 26 MB (limite de áudio da OpenAI é 25 MB)
+
+# CORS: o formulário público chama esta API direto do navegador (origem do frontend)
+_origens = os.getenv("CORS_ORIGINS", "*")
+CORS(app, resources={r"/api/*": {"origins": "*" if _origens == "*" else [o.strip() for o in _origens.split(",")]}})
+
+# Modelos de IA (sobrescreva no .env se quiser trocar sem mexer no código)
+MODELO_TRANSCRICAO = os.getenv("MODELO_TRANSCRICAO", "gpt-4o-transcribe")
+MODELO_CLASSIFICACAO = os.getenv("MODELO_CLASSIFICACAO", "gpt-4o-mini")
+
+# Configurações de conexão com o banco de dados
 DATABASE_URL = os.getenv("DB_URL")
 engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=2, pool_recycle=30, pool_pre_ping=True, pool_use_lifo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Inicializa o modelo Whisper (ou pode ser chamado quando necessário)
-modelo_whisper = whisper.load_model("small")
 apikey = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=apikey)
+
+_openai_client = None
+
+
+def get_openai_client():
+    """Cria o cliente OpenAI sob demanda para o servidor subir mesmo sem a chave.
+    As rotas que usam IA falham de forma controlada se OPENAI_API_KEY não estiver definida."""
+    global _openai_client
+    if _openai_client is None:
+        if not apikey:
+            raise RuntimeError("OPENAI_API_KEY não configurada no .env")
+        _openai_client = OpenAI(api_key=apikey)
+    return _openai_client
+
+# Chave usada pelo painel de acompanhamento (GET /api/registros)
+ACCESS_KEY = os.getenv("ACCESS_KEY")
 
 
 # Modelo da tabela usando SQLAlchemy ORM
@@ -40,15 +59,46 @@ class Registro(Base):
     tema = Column(String, nullable=False)
     resumo = Column(Text, nullable=False)
     data_hora = Column(DateTime, default=lambda: datetime.now(pytz.timezone('America/Sao_Paulo')))
-    bairro = Column(String, nullable=False)
+    municipio = Column(String, nullable=False)   # município (dos 102 de Alagoas)
+    bairro = Column(String, nullable=True)       # bairro / povoado / distrito dentro do município
     origem = Column(String, nullable=False)
     telefone = Column(String(20), nullable=True)
 
 # Criação da tabela no banco de dados
 Base.metadata.create_all(bind=engine)
 
+
+def _migrar_schema():
+    """Converge bancos antigos para o schema municipio + bairro.
+
+    Histórico:
+      - versão original: coluna 'bairro' guardava o bairro
+      - versão intermediária: 'bairro' virou município e 'cidade' guardava o bairro
+      - versão atual: 'municipio' guarda o município e 'bairro' o bairro
+    """
+    from sqlalchemy import inspect, text
+
+    colunas = [c["name"] for c in inspect(engine).get_columns("registros")]
+    with engine.begin() as conn:
+        if "municipio" not in colunas:
+            conn.execute(text("ALTER TABLE registros ADD COLUMN municipio VARCHAR"))
+            # 'bairro' guardava o município na versão intermediária
+            conn.execute(text("UPDATE registros SET municipio = bairro WHERE municipio IS NULL"))
+        if "cidade" in colunas:
+            # 'cidade' guardava o bairro -> move para 'bairro' e descarta 'cidade'
+            conn.execute(text("UPDATE registros SET bairro = cidade"))
+            try:
+                conn.execute(text("ALTER TABLE registros DROP COLUMN cidade"))
+            except Exception:
+                pass  # SQLite < 3.35 não suporta DROP COLUMN; a coluna fica órfã e sem uso
+        # origem antiga "Ouvidoria Web - <município>" vira simplesmente "Site"
+        conn.execute(text("UPDATE registros SET origem = 'Site' WHERE origem LIKE 'Ouvidoria Web%'"))
+
+
+_migrar_schema()
+
 # Função para salvar dados no banco usando SQLAlchemy
-def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro, origem, telefone):
+def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, municipio, origem, telefone, bairro=None):
     session = SessionLocal()
     novo_registro = Registro(
         transcricao=transcricao,
@@ -56,6 +106,7 @@ def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro, ori
         subcategoria=subcategoria,
         tema=tema,
         resumo=resumo,
+        municipio=municipio,
         bairro=bairro,
         origem=origem,
         telefone=telefone
@@ -65,173 +116,215 @@ def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, bairro, ori
     session.close()
 
 
-# Função para download de áudio
-def download_audio(audio_url):
-    response = requests.get(audio_url)
-    if response.status_code == 200:
-        return response.content
-    else:
-        raise Exception(f"Falha ao baixar o áudio: {response.status_code}")
+# Os 102 municípios do estado de Alagoas
+MUNICIPIOS_ALAGOAS = [
+    "Água Branca", "Anadia", "Arapiraca", "Atalaia", "Barra de Santo Antônio",
+    "Barra de São Miguel", "Batalha", "Belém", "Belo Monte", "Boca da Mata",
+    "Branquinha", "Cacimbinhas", "Cajueiro", "Campestre", "Campo Alegre",
+    "Campo Grande", "Canapi", "Capela", "Carneiros", "Chã Preta",
+    "Coité do Nóia", "Colônia Leopoldina", "Coqueiro Seco", "Coruripe", "Craíbas",
+    "Delmiro Gouveia", "Dois Riachos", "Estrela de Alagoas", "Feira Grande", "Feliz Deserto",
+    "Flexeiras", "Girau do Ponciano", "Ibateguara", "Igaci", "Igreja Nova",
+    "Inhapi", "Jacaré dos Homens", "Jacuípe", "Japaratinga", "Jaramataia",
+    "Jequiá da Praia", "Joaquim Gomes", "Jundiá", "Junqueiro", "Lagoa da Canoa",
+    "Limoeiro de Anadia", "Maceió", "Major Isidoro", "Mar Vermelho", "Maragogi",
+    "Maravilha", "Marechal Deodoro", "Maribondo", "Mata Grande", "Matriz de Camaragibe",
+    "Messias", "Minador do Negrão", "Monteirópolis", "Murici", "Novo Lino",
+    "Olho d'Água das Flores", "Olho d'Água do Casado", "Olho d'Água Grande", "Olivença", "Ouro Branco",
+    "Palestina", "Palmeira dos Índios", "Pão de Açúcar", "Pariconha", "Paripueira",
+    "Passo de Camaragibe", "Paulo Jacinto", "Penedo", "Piaçabuçu", "Pilar",
+    "Pindoba", "Piranhas", "Poço das Trincheiras", "Porto Calvo", "Porto de Pedras",
+    "Porto Real do Colégio", "Quebrangulo", "Rio Largo", "Roteiro", "Santa Luzia do Norte",
+    "Santana do Ipanema", "Santana do Mundaú", "São Brás", "São José da Laje", "São José da Tapera",
+    "São Luís do Quitunde", "São Miguel dos Campos", "São Miguel dos Milagres", "São Sebastião", "Satuba",
+    "Senador Rui Palmeira", "Tanque d'Arca", "Taquarana", "Teotônio Vilela", "Traipu",
+    "União dos Palmares", "Viçosa",
+]
 
-# Função para pré-processar o áudio
-def pre_processar_audio(arquivo_audio):
-    # Carregar o áudio usando librosa
-    audio, sr = librosa.load(arquivo_audio, sr=None)  # sr=None mantém a taxa de amostragem original
-    
-    # Normalizar o volume do áudio
-    audio = audio / np.max(np.abs(audio))  # Normaliza o volume
+def origem_valida(origem):
+    # "Site" = formulário público (/); "Cabine <nome>" = cabine física (/cabine); "Whatsapp" = bot
+    return bool(origem) and (origem in ("Site", "Whatsapp") or origem.startswith("Cabine "))
 
-    # Remover ruído usando um filtro simples (pode ser aprimorado com outras técnicas)
-    audio = librosa.effects.preemphasis(audio)  # Aplica preênfase para ajudar a reduzir ruído
-
-    # Salvar o áudio pré-processado
-    temp_file = "temp_preprocessed_audio.wav"
-    sf.write(temp_file, audio, sr)  # Salva o áudio pré-processado
-    return temp_file
-
-
-BAIRROS_VALIDOS = ["Antares", "Bebedouro", "Benedito Bentes", "Bom Parto", "Canaã", "Centro", "Chã da Jaqueira", "Chã de Bebedouro", "Cidade Universitária", "Clima Bom", "Cruz das Almas", "Eustáquio Gomes", "Farol", "Fernão Velho", "Feitosa", "Garça Torta", "Gruta de Lourdes", "Guaxuma", "Ipioca", "Jacarecica", "Jacintinho", "Jardim Petrópolis", "Jaraguá", "Jatiúca", "Levada", "Mangabeiras", "Mutange", "Pajuçara", "Pinheiro", "Pontal da Barra", "Poço", "Ponta Verde", "Prado", "Riacho Doce", "Rio Novo", "Santa Lúcia", "São Jorge", "Serraria", "Tabuleiro do Martins", "Trapiche da Barra", "Vergel do Lago"]
-ORIGENS_VALIDAS = ["Whatsapp", "Cabine Antares", "Cabine Bebedouro", "Cabine Benedito Bentes", "Cabine Bom Parto", "Cabine Canaã", "Cabine Centro", "Cabine Chã da Jaqueira", "Cabine Chã de Bebedouro", "Cabine Cidade Universitária", "Cabine Clima Bom", "Cabine Cruz das Almas", "Cabine Eustáquio Gomes", "Cabine Farol", "Cabine Fernão Velho", "Cabine Feitosa", "Cabine Garça Torta", "Cabine Gruta de Lourdes", "Cabine Guaxuma", "Cabine Ipioca", "Cabine Jacarecica", "Cabine Jacintinho", "Cabine Jardim Petrópolis", "Cabine Jaraguá", "Cabine Jatiúca", "Cabine Levada", "Cabine Mangabeiras", "Cabine Mutange", "Cabine Pajuçara", "Cabine Pinheiro", "Cabine Pontal da Barra", "Cabine Poço", "Cabine Ponta Verde", "Cabine Prado", "Cabine Riacho Doce", "Cabine Rio Novo", "Cabine Santa Lúcia", "Cabine São Jorge", "Cabine Serraria", "Cabine Tabuleiro do Martins", "Cabine Trapiche da Barra", "Cabine Vergel do Lago"]
-
-# Rota para receber reclamações
+# Rota para receber manifestações (áudio via multipart/form-data, texto via JSON)
 @app.route('/api/reclamacoes', methods=['POST'])
 def receber_reclamacao():
-    data = request.json
-    tipo = data.get("tipo")
-    bairro = data.get("localizacao")
-    origem = data.get("origem")
-    telefone = data.get("telefone")
-    
+    if request.content_type and request.content_type.startswith("multipart/form-data"):
+        campos = request.form
+        arquivo = request.files.get("audio")
+        tipo = "audio"
+    else:
+        campos = request.get_json(silent=True) or {}
+        arquivo = None
+        tipo = campos.get("tipo", "texto")
 
-    if bairro not in BAIRROS_VALIDOS or origem not in ORIGENS_VALIDAS:
-        return jsonify({"error": "Bairro ou origem inválidos."}), 400
+    municipio = campos.get("municipio") or campos.get("localizacao")
+    bairro = (campos.get("bairro") or "").strip() or None
+    origem = campos.get("origem")
+    telefone = (campos.get("telefone") or "").strip() or None
+
+    if municipio not in MUNICIPIOS_ALAGOAS or not origem_valida(origem):
+        return jsonify({"error": "Município ou origem inválidos."}), 400
 
     if tipo == "texto":
-        reclamacao_texto = data.get("reclamacao")
-        
-        # Verifica tamanho do texto
-        if len(reclamacao_texto) > 800:
-            return jsonify({"error": "O texto excede o limite de 800 caracteres."}), 400
-        
-        relatorio = gerar_relatorio_detalhado(reclamacao_texto)
-        
-        if "error" in relatorio:  # Se o retorno for um erro, já retorna a mensagem de erro
-            return jsonify(relatorio), 400
-        
-        salvar_dados(reclamacao_texto, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro, origem, telefone)
-        return jsonify({"status": "Reclamação de texto processada e salva."})
-    
+        transcricao = (campos.get("reclamacao") or "").strip()
+        if not transcricao:
+            return jsonify({"error": "Escreva a sua manifestação."}), 400
+        if len(transcricao) > 2000:
+            return jsonify({"error": "O texto excede o limite de 2000 caracteres."}), 400
+
     elif tipo == "audio":
-        audio_url = data.get("audio_url")
+        if arquivo is None or not arquivo.filename:
+            return jsonify({"error": "Envie o arquivo de áudio."}), 400
+        dados_audio = arquivo.read()
+        if len(dados_audio) < 2000:
+            return jsonify({"error": "O áudio ficou vazio. Grave novamente, mais perto do microfone."}), 400
+        if len(dados_audio) > 25 * 1024 * 1024:
+            return jsonify({"error": "O áudio é muito grande (máximo 25 MB)."}), 400
         try:
-            audio_data = download_audio(audio_url)
-            with open("temp_input_audio.wav", "wb") as f:
-                f.write(audio_data)
-                
-            # Verificar duração do áudio
-            try:
-                duration = librosa.get_duration(filename="temp_input_audio.wav")
-                if duration > 60:  # 60 segundos = 1 minuto
-                    return jsonify({"error": "O áudio excede o limite de 1 minuto."}), 400
-            except Exception as e:
-                return jsonify({"error": f"Erro ao processar o áudio: {str(e)}"}), 400
-            
-            # Pré-processa o áudio
-            arquivo_audio_processado = pre_processar_audio("temp_input_audio.wav")
-            
-            transcricao = transcrever_audio(arquivo_audio_processado)
-            transcricao = corrigir_transcricao(transcricao)
-            relatorio = gerar_relatorio_detalhado(transcricao)
-            
-            if "error" in relatorio:  # Se o retorno for um erro, já retorna a mensagem de erro
-                return jsonify(relatorio), 400
-            
-            salvar_dados(transcricao, relatorio["categoria"], relatorio["subcategoria"], relatorio["tema"], relatorio["resumo"], bairro, origem, telefone)
-                
-            return jsonify({"status": "Reclamação de áudio processada e salva."})
-        finally:
-            # Remove os arquivos temporários
-            if os.path.exists("temp_input_audio.wav"):
-                os.remove("temp_input_audio.wav")
-            if os.path.exists("temp_preprocessed_audio.wav"):
-                os.remove("temp_preprocessed_audio.wav")
+            transcricao = transcrever_audio(arquivo.filename, dados_audio, arquivo.mimetype)
+        except RuntimeError as e:
+            return jsonify({"error": str(e)}), 503
+        except Exception:
+            app.logger.exception("Falha ao transcrever o áudio")
+            return jsonify({"error": "Não foi possível transcrever o áudio. Tente novamente em instantes."}), 502
+
     else:
         return jsonify({"error": "Tipo inválido. Use 'texto' ou 'audio'."}), 400
+
+    try:
+        relatorio = gerar_relatorio_detalhado(transcricao)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 503
+    except Exception:
+        app.logger.exception("Falha ao classificar a manifestação")
+        return jsonify({"error": "Não foi possível processar a manifestação. Tente novamente em instantes."}), 502
+
+    if "error" in relatorio:
+        return jsonify(relatorio), 400
+
+    salvar_dados(transcricao, relatorio["categoria"], relatorio["subcategoria"],
+                 relatorio["tema"], relatorio["resumo"], municipio, origem, telefone, bairro)
+    return jsonify({"status": "Manifestação recebida. Obrigado por falar com o JHC!"})
             
 
-def transcrever_audio(arquivo_audio):
-    resultado = modelo_whisper.transcribe(arquivo_audio, language='pt', task='transcribe', fp16=False)
-    return resultado['text']
+# Rota de leitura para o painel de acompanhamento das manifestações
+@app.route('/api/registros', methods=['GET'])
+def listar_registros():
+    chave = request.headers.get("X-Access-Key")
+    if not ACCESS_KEY or chave != ACCESS_KEY:
+        return jsonify({"error": "Não autorizado."}), 401
 
-def corrigir_transcricao(texto):
-    instructions = (
-        "Você é um assistente de correção de textos que segue as normas da língua portuguesa. O texto a ser corrigido é sobre um feedback que se passa na cidade de Maceió, então leve em consideração palavras, expressões e localizações que sejam comuns ou específicas de Maceió. "
+    session = SessionLocal()
+    try:
+        registros = session.query(Registro).order_by(Registro.id).all()
+        dados = [
+            {
+                "id": r.id,
+                "origem": r.origem,
+                "categoria": r.categoria,
+                "subcategoria": r.subcategoria,
+                "tema": r.tema,
+                "resumo": r.resumo,
+                "municipio": r.municipio,
+                "bairro": r.bairro,
+                "telefone": r.telefone,
+                "data_hora": r.data_hora.isoformat() if r.data_hora else None,
+            }
+            for r in registros
+        ]
+        return jsonify(dados)
+    finally:
+        session.close()
+
+
+PROMPT_TRANSCRICAO = (
+    "Manifestação falada de um cidadão para a Ouvidoria do Governo do Estado de Alagoas. "
+    "Pode citar municípios de Alagoas (Maceió, Arapiraca, Penedo, Rio Largo, Palmeira dos Índios, "
+    "União dos Palmares, Delmiro Gouveia, Santana do Ipanema, Coruripe, Marechal Deodoro) e "
+    "serviços públicos: posto de saúde, UPA, SAMU, VAMU, tapa-buraco, boca de lobo, coleta de lixo, "
+    "iluminação pública, transporte intermunicipal, regularização fundiária, escola estadual."
+)
+
+CATEGORIAS_VALIDAS = [
+    "Meio Ambiente", "Educação", "Infraestrutura", "Limpeza Urbana", "Turismo",
+    "Saúde", "Transporte", "Segurança Pública", "Habitação", "Agricultura e Pesca",
+    "Assistência Social", "Emprego e Renda", "Outros",
+]
+
+SCHEMA_RELATORIO = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "pertinente": {
+            "type": "boolean",
+            "description": (
+                "true se a manifestação for uma reclamação, denúncia, sugestão ou pedido de "
+                "melhoria para o estado de Alagoas ou um de seus municípios. false se for áudio "
+                "vazio/inaudível, teste, ou assunto sem relação com o poder público."
+            ),
+        },
+        "categoria": {"type": "string", "enum": CATEGORIAS_VALIDAS},
+        "subcategoria": {
+            "type": "string",
+            "description": "Assunto específico dentro da categoria, em poucas palavras (ex.: 'Tapa-buraco', 'Falta de medicamentos'). String vazia se não for pertinente.",
+        },
+        "tema": {
+            "type": "string",
+            "description": "Tema principal em 2 a 5 palavras. String vazia se não for pertinente.",
+        },
+        "resumo": {
+            "type": "string",
+            "description": "Resumo objetivo em 1 ou 2 frases, na 3ª pessoa, sem opinião. String vazia se não for pertinente.",
+        },
+    },
+    "required": ["pertinente", "categoria", "subcategoria", "tema", "resumo"],
+}
+
+
+def transcrever_audio(nome_arquivo, dados, mimetype):
+    resposta = get_openai_client().audio.transcriptions.create(
+        model=MODELO_TRANSCRICAO,
+        file=(nome_arquivo or "audio.webm", dados, mimetype or "application/octet-stream"),
+        language="pt",
+        prompt=PROMPT_TRANSCRICAO,
+        response_format="text",
     )
-    prompt = f"Reescreva o texto abaixo de forma clara e corrigida:\n\n{texto}"
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "system", "content": instructions},
-                  {"role": "user", "content": prompt}],
-    )
-    return response.choices[0].message.content.strip()
+    return resposta if isinstance(resposta, str) else getattr(resposta, "text", str(resposta))
+
 
 def gerar_relatorio_detalhado(texto):
-    # Validação do texto de entrada
-    if not texto or len(texto.strip()) < 20 or texto == "👩‍⚕️ Pronto Atendimento":  # Verifica se o texto tem menos de 20 caracteres
-        return {"error": "A ocorrência precisa ser referente ao município."}
-    
-    instructions = (
-        f"Você é um assistente que classifica textos de denúncias/reclamações direcionados a uma prefeitura."
-        f"Responda no formato: "
-        f"Categoria: <categoria>\n"
-        f"Subcategoria: <subcategoria>\n"
-        f"Tema: <tema>\n"
-        f"Resumo: <resumo>\n\n"
-        f"Se o texto NÃO estiver relacionado a problemas ou sugestões para melhorias no município, utilize as seguintes respostas padrões:\n"
-        f"Categoria: 'Sem categoria'\n"
-        f"Subcategoria: 'Sem subcategoria'\n"
-        f"Tema: 'Sem tema'\n"
-        f"Resumo: 'Sem resumo'"
-    )
-    prompt = (
-            "Para cada texto, siga estas etapas: "
-            "1. Classifique o texto em uma das seguintes categorias principais: Meio Ambiente, Educação, Infraestrutura, Limpeza Urbana, Turismo, Saúde, Transporte. "
-            "2. Dentro da categoria escolhida, atribua uma subcategoria entre as opções: Vagas para Sepultamento, Vagas para Creche, Oportunidades, Indicação de Descarte Irregular, Falta de Coleta Domiciliar, Poda de Árvore, Supressão de Árvore, Reflorestamento e Plantio, Capinação, Limpeza em Geral, Tapar Buraco, Implantação de Asfalto, Manutenção de Vias não Pavimentadas, Alagamento, Limpeza de Boca de Lobo, Marcação de Exames Consultas e Cirurgias, Unidade de Saúde, Atendimento Médico, Transporte Público, Tempo de Viagem, Linhas de Ônibus, Integração, Terminais, Abrigos, VAMU (Cartão de Transporte), Acessibilidade em Transporte, Iluminação Pública, Acessibilidade, Esgoto, Manutenção de Praças e Parques, Controle de Fluxo Viário. Se for necessário crie uma subcategoria condizente com o texto. "
-            "3. Identifique o tema principal do texto. "
-            "4. Crie um resumo objetivo baseado no conteúdo da reclamação. "
-            f"Agora analise o seguinte texto e realize o processo: '{texto}'"
-              )
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": instructions},
-            {"role": "user", "content": prompt}
-        ],
-        
-    )
-    relatorio = response.choices[0].message.content
-    print(f"Relatório gerado: {relatorio}")
-    
-    partes = {part.split(": ")[0].strip(): part.split(": ")[1].strip("'\"") for part in relatorio.split("\n") if ": " in part}
-    print(f"Partes extraídas: {partes}")
-    categoria = partes.get("Categoria", "Sem categoria").strip()
-    subcategoria = partes.get("Subcategoria", "Sem subcategoria").strip()
-    tema = partes.get("Tema", "Sem tema").strip()
-    resumo = partes.get("Resumo", "Sem resumo").strip()
-    
-    # Verificar se algum campo tem os valores padrão "Sem categoria", "Sem subcategoria", "Sem tema", ou "Sem resumo"
-    if categoria.lower() in ["sem categoria", "'sem categoria'", '"sem categoria"'] or \
-       subcategoria.lower() in ["sem subcategoria", "'sem subcategoria'", '"sem subcategoria"'] or \
-       tema.lower() in ["sem tema", "'sem tema'", '"sem tema"'] or \
-       resumo.lower() in ["sem resumo", "'sem resumo'", '"sem resumo"']:
-        return {"error": "A ocorrência precisa ser referente ao município."}
+    texto = (texto or "").strip()
+    if len(texto) < 15:
+        return {"error": "Não foi possível entender a manifestação. Grave novamente, com o microfone mais perto e num lugar mais silencioso."}
 
-    
+    instrucoes = (
+        "Você classifica manifestações enviadas à Ouvidoria da campanha de JHC ao Governo do "
+        "Estado de Alagoas. São reclamações, denúncias, sugestões ou pedidos de melhoria para o "
+        "estado e seus municípios. O texto vem de uma transcrição de áudio e pode ter pequenos "
+        "erros — interprete a intenção do cidadão. Responda apenas no schema JSON."
+    )
+    resposta = get_openai_client().chat.completions.create(
+        model=MODELO_CLASSIFICACAO,
+        temperature=0,
+        messages=[
+            {"role": "system", "content": instrucoes},
+            {"role": "user", "content": texto},
+        ],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "relatorio_ouvidoria", "strict": True, "schema": SCHEMA_RELATORIO},
+        },
+    )
+    dados = json.loads(resposta.choices[0].message.content)
+
+    if not dados.get("pertinente"):
+        return {"error": "A manifestação precisa ser sobre um assunto do estado de Alagoas ou de um município. Conte o que você quer que melhore."}
+
     return {
-        "categoria": categoria,
-        "subcategoria": subcategoria,
-        "tema": tema,
-        "resumo": resumo
+        "categoria": dados["categoria"],
+        "subcategoria": (dados.get("subcategoria") or "").strip() or "Não especificada",
+        "tema": (dados.get("tema") or "").strip() or dados["categoria"],
+        "resumo": (dados.get("resumo") or "").strip() or texto[:280],
     }
 
 if __name__ == '__main__':

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <rect width="48" height="48" rx="10" fill="#F26522" />
+  <g transform="skewX(-11)" transform-origin="24 24">
+    <text x="26" y="25" text-anchor="middle" dominant-baseline="central"
+          font-family="'Anton', 'Arial Black', 'Arial', sans-serif"
+          font-weight="900" font-size="32" letter-spacing="-2.5" fill="#FFFFFF">45</text>
+  </g>
+</svg>

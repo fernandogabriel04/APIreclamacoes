@@ -1,3 +1,6 @@
 # .gitignore
 .env*
+!.env.example
 venv/
+local.db
+temp_*.wav
