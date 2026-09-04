@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 from openai import OpenAI
@@ -8,9 +8,19 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import pytz
 
 load_dotenv()
+
+
+def normalizar_db_url(url):
+    """Aceita as strings que Railway/Supabase/Heroku entregam e força o driver psycopg2."""
+    if not url:
+        return "sqlite:///./local.db"
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg2://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg2://" + url[len("postgresql://"):]
+    return url
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 26 * 1024 * 1024  # 26 MB (limite de áudio da OpenAI é 25 MB)
@@ -23,9 +33,13 @@ CORS(app, resources={r"/api/*": {"origins": "*" if _origens == "*" else [o.strip
 MODELO_TRANSCRICAO = os.getenv("MODELO_TRANSCRICAO", "gpt-4o-transcribe")
 MODELO_CLASSIFICACAO = os.getenv("MODELO_CLASSIFICACAO", "gpt-4o-mini")
 
-# Configurações de conexão com o banco de dados
-DATABASE_URL = os.getenv("DB_URL")
-engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=2, pool_recycle=30, pool_pre_ping=True, pool_use_lifo=True)
+# Configurações de conexão com o banco de dados (SQLite em dev, Postgres em produção)
+DATABASE_URL = normalizar_db_url(os.getenv("DB_URL"))
+_e_sqlite = DATABASE_URL.startswith("sqlite")
+_pool_kwargs = {} if _e_sqlite else dict(
+    pool_size=5, max_overflow=2, pool_recycle=300, pool_pre_ping=True
+)
+engine = create_engine(DATABASE_URL, **_pool_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -58,7 +72,7 @@ class Registro(Base):
     subcategoria = Column(String, nullable=False)
     tema = Column(String, nullable=False)
     resumo = Column(Text, nullable=False)
-    data_hora = Column(DateTime, default=lambda: datetime.now(pytz.timezone('America/Sao_Paulo')))
+    data_hora = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     municipio = Column(String, nullable=False)   # município (dos 102 de Alagoas)
     bairro = Column(String, nullable=True)       # bairro / povoado / distrito dentro do município
     origem = Column(String, nullable=False)
@@ -75,27 +89,45 @@ def _migrar_schema():
       - versão original: coluna 'bairro' guardava o bairro
       - versão intermediária: 'bairro' virou município e 'cidade' guardava o bairro
       - versão atual: 'municipio' guarda o município e 'bairro' o bairro
+
+    Num Postgres novo (produção) isto é praticamente um no-op — o create_all já
+    monta o schema correto. Cada passo é tolerante a falha para não quebrar o boot
+    com múltiplos workers do gunicorn subindo ao mesmo tempo.
     """
     from sqlalchemy import inspect, text
 
-    colunas = [c["name"] for c in inspect(engine).get_columns("registros")]
+    def tenta(conn, sql):
+        try:
+            conn.execute(text(sql))
+        except Exception as exc:  # coluna já existe, concorrência entre workers, etc.
+            app.logger.info("migração ignorou: %s (%s)", sql, exc)
+
+    try:
+        colunas = [c["name"] for c in inspect(engine).get_columns("registros")]
+    except Exception:
+        return  # tabela ainda não existe
+
     with engine.begin() as conn:
         if "municipio" not in colunas:
-            conn.execute(text("ALTER TABLE registros ADD COLUMN municipio VARCHAR"))
-            # 'bairro' guardava o município na versão intermediária
-            conn.execute(text("UPDATE registros SET municipio = bairro WHERE municipio IS NULL"))
+            tenta(conn, "ALTER TABLE registros ADD COLUMN municipio VARCHAR")
+            tenta(conn, "UPDATE registros SET municipio = bairro WHERE municipio IS NULL")
         if "cidade" in colunas:
-            # 'cidade' guardava o bairro -> move para 'bairro' e descarta 'cidade'
-            conn.execute(text("UPDATE registros SET bairro = cidade"))
-            try:
-                conn.execute(text("ALTER TABLE registros DROP COLUMN cidade"))
-            except Exception:
-                pass  # SQLite < 3.35 não suporta DROP COLUMN; a coluna fica órfã e sem uso
-        # origem antiga "Ouvidoria Web - <município>" vira simplesmente "Site"
-        conn.execute(text("UPDATE registros SET origem = 'Site' WHERE origem LIKE 'Ouvidoria Web%'"))
+            tenta(conn, "UPDATE registros SET bairro = cidade")
+            tenta(conn, "ALTER TABLE registros DROP COLUMN cidade")
+        tenta(conn, "UPDATE registros SET origem = 'Site' WHERE origem LIKE 'Ouvidoria Web%'")
 
 
 _migrar_schema()
+
+
+@app.get("/")
+def raiz():
+    return jsonify({"servico": "Ouvidoria JHC — API", "ok": True})
+
+
+@app.get("/health")
+def health():
+    return jsonify({"ok": True})
 
 # Função para salvar dados no banco usando SQLAlchemy
 def salvar_dados(transcricao, categoria, subcategoria, tema, resumo, municipio, origem, telefone, bairro=None):

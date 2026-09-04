@@ -1,6 +1,6 @@
 import os
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
@@ -9,7 +9,18 @@ from sqlalchemy.orm import sessionmaker
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DB_URL")
+
+def normalizar_db_url(url):
+    if not url:
+        return "sqlite:///./local.db"
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg2://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg2://" + url[len("postgresql://"):]
+    return url
+
+
+DATABASE_URL = normalizar_db_url(os.getenv("DB_URL"))
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -24,7 +35,7 @@ class Registro(Base):
     subcategoria = Column(String, nullable=False)
     tema = Column(String, nullable=False)
     resumo = Column(Text, nullable=False)
-    data_hora = Column(DateTime)
+    data_hora = Column(DateTime(timezone=True))
     municipio = Column(String, nullable=False)   # município (dos 102 de Alagoas)
     bairro = Column(String, nullable=True)       # bairro / povoado / distrito dentro do município
     origem = Column(String, nullable=False)
@@ -126,7 +137,7 @@ def gerar_registros(n=140):
     registros = []
     municipios = list(MUNICIPIOS.keys())
     pesos = [PESOS.get(m, 2) for m in municipios]
-    agora = datetime.now()
+    agora = datetime.now(timezone.utc)
 
     for i in range(n):
         municipio = random.choices(municipios, weights=pesos, k=1)[0]
