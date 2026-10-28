@@ -32,7 +32,7 @@ engine = create_engine(DATABASE_URL)
 
 # Função para buscar dados do banco de dados
 def fetch_data():
-    query = "SELECT id, origem, categoria, subcategoria, bairro, resumo, data_hora, telefone FROM registros"
+    query = "SELECT id, origem, categoria, subcategoria, bairro, resumo, transcricao, data_hora, telefone FROM registros"
     df = pd.read_sql(query, engine)
     df["data_hora"] = pd.to_datetime(df["data_hora"])  # Garantir formato datetime
     return df
@@ -168,6 +168,7 @@ def dashboard_layout():
                     {"name": "Subcategoria", "id": "subcategoria"},
                     {"name": "Bairro", "id": "bairro"},
                     {"name": "Resumo", "id": "resumo"},
+                    {"name": "Transcrição (fala original)", "id": "transcricao"},
                     {"name": "Data/Hora", "id": "data_hora"},
                     {"name": "Telefone", "id": "telefone"},
                 ],
@@ -183,8 +184,13 @@ def dashboard_layout():
                     'color': '#333',
                     'textAlign': 'left',
                     'padding': '5px',
-                    'fontFamily': 'Arial'
+                    'fontFamily': 'Arial',
+                    'whiteSpace': 'normal',
+                    'height': 'auto'
                 },
+                style_cell_conditional=[
+                    {'if': {'column_id': 'transcricao'}, 'minWidth': '300px', 'maxWidth': '500px'}
+                ],
                 page_size=10,
                 style_data_conditional=[
                     {'if': {'row_index': 'odd'}, 'backgroundColor': '#f2f2f2'}

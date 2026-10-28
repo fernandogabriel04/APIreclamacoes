@@ -1,348 +1,167 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
-const Recorder = () => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [bairro, setBairro] = useState("Carregando localização...");
-  const [bairrosDisponiveis] = useState([
-    "Antares",
-    "Bebedouro",
-    "Benedito Bentes",
-    "Bom Parto",
-    "Canaã",
-    "Centro",
-    "Chã da Jaqueira",
-    "Chã de Bebedouro",
-    "Cidade Universitária",
-    "Clima Bom",
-    "Cruz das Almas",
-    "Eustáquio Gomes",
-    "Farol",
-    "Fernão Velho",
-    "Feitosa",
-    "Garça Torta",
-    "Gruta de Lourdes",
-    "Guaxuma",
-    "Ipioca",
-    "Jacarecica",
-    "Jacintinho",
-    "Jardim Petrópolis",
-    "Jaraguá",
-    "Jatiúca",
-    "Levada",
-    "Mangabeiras",
-    "Mutange",
-    "Pajuçara",
-    "Pinheiro",
-    "Pontal da Barra",
-    "Poço",
-    "Ponta Verde",
-    "Prado",
-    "Riacho Doce",
-    "Rio Novo",
-    "Santa Lúcia",
-    "São Jorge",
-    "Serraria",
-    "Tabuleiro do Martins",
-    "Trapiche da Barra",
-    "Vergel do Lago",
-  ]);
-  const [showSelect, setShowSelect] = useState(false);
-  const [loading, setLoading] = useState(false); // Indica carregamento
-  const [recordingTime, setRecordingTime] = useState(0);
-  const mediaRecorder = useRef(null);
-  const audioChunks = useRef([]);
-  const timerRef = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+const LIMITE_SEGUNDOS = 60;
 
-  const playAudioWithWebAudio = async (blob) => {
-    try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const arrayBuffer = await blob.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+const formatar = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
+export default function Recorder({ bairro }) {
+  const [fase, setFase] = useState("pronto"); // pronto | gravando | revisar | enviando | enviado
+  const [segundos, setSegundos] = useState(0);
+  const [audio, setAudio] = useState(null); // { blob, url }
+  const [erro, setErro] = useState("");
+  const gravador = useRef(null);
+  const pedacos = useRef([]);
+  const stream = useRef(null);
 
-      source.start(0);
-      source.onended = () => {
-        setIsPlaying(false); // Atualiza o estado quando o áudio termina
-      };
-
-      setIsPlaying(true);
-    } catch (error) {
-      console.error("Erro ao reproduzir áudio com Web Audio API:", error);
-    }
-  };
-
-  const handlePlayAudio = () => {
-    if (audioBlob) {
-      playAudioWithWebAudio(audioBlob);
-    }
-  };
-  const getBairroFromCoordinates = async (latitude, longitude) => {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`;
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-      const bairro =
-        data.address.suburb ||
-        data.address.neighbourhood ||
-        "Bairro não identificado";
-      return bairro;
-    } catch (error) {
-      console.error("Erro ao buscar bairro:", error);
-      return "Erro ao identificar bairro";
-    }
-  };
-
-  const confirmarOuAlterarBairro = async (bairroObtido) => {
-    const confirmacao = window.confirm(
-      `Você está em "${bairroObtido}". Deseja confirmar este bairro?`
-    );
-
-    if (confirmacao) {
-      setBairro(bairroObtido);
-      localStorage.setItem("bairro", bairroObtido);
-    } else {
-      setShowSelect(true); // Mostra o select
-    }
-  };
-
-  const handleBairroSelecionado = (event) => {
-    const bairroEscolhido = event.target.value;
-    if (bairroEscolhido) {
-      setBairro(bairroEscolhido);
-      localStorage.setItem("bairro", bairroEscolhido);
-      setShowSelect(false); // Esconde o select após a seleção
-    }
-  };
-
-  const getLocationAndSetBairro = async () => {
-    const storedBairro = localStorage.getItem("bairro");
-    if (storedBairro) {
-      setBairro(storedBairro);
-      return;
-    }
-
-    if (!navigator.geolocation) {
-      alert("Geolocalização não suportada pelo navegador.");
-      setShowSelect(true);
-      return;
-    }
-
-    setLoading(true); // Ativa carregamento
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        const bairroObtido = await getBairroFromCoordinates(latitude, longitude);
-        confirmarOuAlterarBairro(bairroObtido);
-        setLoading(false); // Desativa carregamento
-      },
-      (error) => {
-        console.error("Erro ao acessar localização, selecione o bairro da Cabine:", error);
-        setShowSelect(true); // Mostra o select se houver erro ao obter localização
-        setLoading(false); // Desativa carregamento
-      }
-    );
-  };
+  useEffect(() => () => {
+    stream.current?.getTracks().forEach((t) => t.stop());
+    if (audio?.url) URL.revokeObjectURL(audio.url);
+  }, [audio]);
 
   useEffect(() => {
-    getLocationAndSetBairro();
-  }, []);
+    if (fase !== "gravando") return;
+    const timer = setInterval(() => setSegundos((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, [fase]);
 
-  // Contador
   useEffect(() => {
-    if (isRecording) {
-      timerRef.current = setInterval(() => {
-        setRecordingTime((prevTime) => {
-          if (prevTime >= 60) {
-            stopRecording();
-            alert("O limite de gravação de 1 minuto foi atingido.");
-            return prevTime;
-          }
-          return prevTime + 1;
-        });
-      }, 1000);
-    } else {
-      clearInterval(timerRef.current);
-    }
+    if (fase === "gravando" && segundos >= LIMITE_SEGUNDOS) parar();
+  }, [segundos, fase]);
 
-    return () => clearInterval(timerRef.current);
-  }, [isRecording]);
-
-  const startRecording = async () => {
+  const iniciar = async () => {
+    setErro("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder.current = new MediaRecorder(stream);
-
-      mediaRecorder.current.ondataavailable = (event) => {
-        audioChunks.current.push(event.data);
-      };
-
-      mediaRecorder.current.onstop = () => {
-        const blob = new Blob(audioChunks.current, { type: "audio/wav" });
-        setAudioBlob(blob);
-        audioChunks.current = [];
-      };
-
-      mediaRecorder.current.start();
-      setIsRecording(true);
-      setRecordingTime(0);
-    } catch (error) {
-      alert("Erro ao acessar o microfone: " + error.message);
+      stream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setErro("Não foi possível acessar o microfone. Verifique a permissão do navegador.");
+      return;
     }
+    const rec = new MediaRecorder(stream.current);
+    pedacos.current = [];
+    rec.ondataavailable = (e) => e.data.size && pedacos.current.push(e.data);
+    rec.onstop = () => {
+      const blob = new Blob(pedacos.current, { type: rec.mimeType || "audio/webm" });
+      stream.current?.getTracks().forEach((t) => t.stop());
+      setAudio({ blob, url: URL.createObjectURL(blob) });
+      setFase("revisar");
+    };
+    gravador.current = rec;
+    rec.start();
+    setSegundos(0);
+    setFase("gravando");
   };
 
-  const stopRecording = () => {
-    if (mediaRecorder.current) {
-      mediaRecorder.current.stop();
-    }
-    setIsRecording(false);
+  const parar = () => {
+    if (gravador.current?.state === "recording") gravador.current.stop();
   };
 
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  const regravar = () => {
+    setAudio(null);
+    setSegundos(0);
+    setErro("");
+    setFase("pronto");
   };
 
-  const uploadAudio = async () => {
-    if (!audioBlob) return;
-
-    setIsProcessing(true);
-
-    const formData = new FormData();
-    formData.append("file", audioBlob, "audio.wav");
-
+  const enviar = async () => {
+    setFase("enviando");
+    setErro("");
+    const form = new FormData();
+    form.append("file", audio.blob, "audio.wav");
+    form.append("tipo", "audio");
+    form.append("localizacao", bairro);
+    form.append("origem", `Cabine ${bairro}`);
     try {
-      const fileIoResponse = await fetch("https://file.io", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!fileIoResponse.ok) {
-        throw new Error("Falha ao fazer upload para file.io");
-      }
-
-      const fileIoResult = await fileIoResponse.json();
-      console.log("Resposta do file.io:", fileIoResult);
-
-      if (!fileIoResult.success) {
-        throw new Error("Upload para file.io falhou.");
-      }
-
-      const payload = {
-        audio_url: fileIoResult.link,
-        tipo: "audio",
-        localizacao: bairro,
-        origem: "Cabine " + bairro,
-      };
-
-    console.log("Payload enviado para a API:", payload);
-
-      const apiResponse = await fetch(process.env.NEXT_PUBLIC_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!apiResponse.ok) {
-        const errorData = await apiResponse.json();
-        console.error("Erro da API:", errorData);
-        alert(errorData.error || "Erro ao enviar áudio.");
+      const res = await fetch(process.env.NEXT_PUBLIC_API_URL, { method: "POST", body: form });
+      const corpo = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErro(corpo.error || "Não foi possível enviar o áudio. Tente novamente.");
+        setFase("revisar");
         return;
       }
-
-      const result = await apiResponse.json();
-      alert(result.status || "Áudio enviado com sucesso!");
-      window.location.reload();
-    } catch (error) {
-      console.error("Erro ao enviar áudio:", error);
-      alert("Houve algum erro. Leia as instruções e tente novamente.");
-      window.location.reload();
-    } finally {
-      setIsProcessing(false); // Desativa o estado de processamento
+      setFase("enviado");
+    } catch {
+      setErro("Sem conexão com o servidor. Verifique sua internet e tente de novo.");
+      setFase("revisar");
     }
   };
 
+  if (fase === "enviado") {
+    return (
+      <div className="mt-8 rounded-2xl bg-emerald-50 border border-emerald-200 p-8 text-center" role="status">
+        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m5 12 5 5L20 7" /></svg>
+        </span>
+        <h2 className="mt-4 text-2xl font-extrabold text-emerald-900">Relato enviado!</h2>
+        <p className="mt-1 text-emerald-800">Obrigado por ajudar a melhorar {bairro}.</p>
+        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+          <button onClick={regravar} className="rounded-xl bg-maceio-navy px-6 py-3 font-bold text-white hover:bg-maceio-deep transition">Enviar outro relato</button>
+          <Link href="/" className="rounded-xl border-2 border-emerald-300 px-6 py-3 font-bold text-emerald-900 hover:bg-emerald-100 transition">Voltar ao início</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const gravando = fase === "gravando";
+
   return (
-    <div className="flex flex-col items-center justify-center w-full flex-grow bg-gray-100">
-      {loading && <p>Carregando localização...</p>}
-      <h2 className="mb-4 text-lg font-bold text-gray-800"> {bairro !== "Carregando localização..." && bairro ? `Cabine ${bairro}` : "Carregando localização..."}</h2>
-  
-      {showSelect && (
+    <div className="mt-8">
+      {(fase === "pronto" || gravando) && (
         <div className="flex flex-col items-center">
-          <label htmlFor="bairros" className="text-gray-600 mb-2">
-            Escolha o bairro:
-          </label>
-          <select
-            id="bairros"
-            onChange={handleBairroSelecionado}
-            className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            defaultValue=""
-          >
-            <option value="" disabled>
-              Selecione um bairro
-            </option>
-            {bairrosDisponiveis.map((bairro) => (
-              <option key={bairro} value={bairro}>
-                {bairro}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-  
-      {!showSelect && (
-        <>
-        <button
-          onClick={isRecording ? stopRecording : startRecording}
-          className={`w-60 h-60 rounded-full flex items-center justify-center text-white ${
-            isRecording ? "bg-red-500" : "bg-green-500"
-          } shadow-lg hover:scale-110 transition-transform duration-200`}
-        >
-          {isRecording ? "Parar" : "Gravar"}
-        </button>
-        <p className="mt-4 text-lg text-gray-700">
-        Tempo de gravação: {formatTime(recordingTime)}
-        </p>
-        </>
-      )}
-  
-      {audioBlob && (
-        <div className="mt-6 flex flex-col items-center">
-          <h3 className="text-lg text-gray-600 mb-4">Pré-visualizar áudio:</h3>
-          {audioBlob && (
+          <div className="relative isolate">
             <button
-              onClick={handlePlayAudio}
-              disabled={isPlaying}
-              className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+              onClick={gravando ? parar : iniciar}
+              aria-label={gravando ? "Parar gravação" : "Começar a gravar"}
+              className={`${gravando ? "pulse-ring bg-red-600 hover:bg-red-700" : "bg-maceio-orange hover:bg-orange-500"} relative flex h-36 w-36 items-center justify-center rounded-full text-white shadow-lg transition`}
             >
-              {isPlaying ? "Reproduzindo..." : "Reproduzir Áudio"}
+              {gravando ? (
+                <span className="h-11 w-11 rounded-md bg-white" aria-hidden />
+              ) : (
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 15a4 4 0 0 0 4-4V6a4 4 0 0 0-8 0v5a4 4 0 0 0 4 4Zm6-4a1 1 0 1 1 2 0 8 8 0 0 1-7 7.94V21h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.06A8 8 0 0 1 4 11a1 1 0 1 1 2 0 6 6 0 0 0 12 0Z" /></svg>
+              )}
             </button>
-          )}
-          <button
-            onClick={uploadAudio}
-            disabled={isProcessing} // Desativa o botão quando está processando
-            className={`mt-4 px-4 py-2 rounded-lg transition-colors ${
-              isProcessing
-                ? "bg-gray-500 text-white cursor-not-allowed"
-                : "bg-blue-500 text-white hover:bg-blue-600"
-            }`}
-          >
-            {isProcessing ? "Processando..." : "Enviar Áudio"}
-          </button>
+          </div>
+          <p className="mt-6 text-4xl font-extrabold tabular-nums text-maceio-navy" aria-live="off">{formatar(segundos)}</p>
+          <div className="mt-3 h-2 w-full max-w-xs overflow-hidden rounded-full bg-maceio-sky" role="progressbar" aria-valuemin={0} aria-valuemax={LIMITE_SEGUNDOS} aria-valuenow={segundos}>
+            <div className="h-full bg-maceio-blue transition-all duration-1000 ease-linear" style={{ width: `${(segundos / LIMITE_SEGUNDOS) * 100}%` }} />
+          </div>
+          <p className="mt-4 font-semibold text-maceio-muted">
+            {gravando ? "Gravando… toque para parar" : "Toque para começar a gravar"}
+          </p>
         </div>
+      )}
+
+      {(fase === "revisar" || fase === "enviando") && audio && (
+        <div>
+          <p className="font-bold text-maceio-navy">Ouça seu relato antes de enviar</p>
+          <audio controls src={audio.url} className="mt-3 w-full" />
+          <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={enviar}
+              disabled={fase === "enviando"}
+              className="flex-1 inline-flex items-center justify-center gap-3 rounded-xl bg-maceio-navy px-6 py-4 text-lg font-bold text-white hover:bg-maceio-deep transition disabled:opacity-70"
+            >
+              {fase === "enviando" && <span className="h-5 w-5 rounded-full border-4 border-white/30 border-t-white animate-spin" aria-hidden />}
+              {fase === "enviando" ? "Transcrevendo e classificando…" : "Enviar relato"}
+            </button>
+            <button
+              onClick={regravar}
+              disabled={fase === "enviando"}
+              className="rounded-xl border-2 border-maceio-line px-6 py-4 font-bold text-maceio-navy hover:bg-maceio-sky transition disabled:opacity-50"
+            >
+              Gravar de novo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {erro && (
+        <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-semibold text-red-800">
+          {erro}
+        </p>
       )}
     </div>
-  );  
-};
-
-export default Recorder;
+  );
+}
