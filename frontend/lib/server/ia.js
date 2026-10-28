@@ -1,5 +1,6 @@
 import "server-only";
 import OpenAI, { toFile } from "openai";
+import { contextoParaClassificacao, contextoParaCorrecao, vocabularioTranscricao } from "./contexto";
 
 const MODELO_TEXTO = "openai/gpt-oss-120b";
 const MODELO_AUDIO = "whisper-large-v3-turbo";
@@ -14,11 +15,13 @@ export async function transcrever(buffer, formato) {
     model: MODELO_AUDIO,
     language: "pt",
     response_format: "verbose_json",
+    prompt: vocabularioTranscricao,
   });
   return { texto: resultado.text.trim(), duracao: resultado.duration };
 }
 
 export async function corrigirTranscricao(texto) {
+  const contexto = contextoParaCorrecao(texto);
   const resposta = await cliente().chat.completions.create({
     model: MODELO_TEXTO,
     messages: [
@@ -27,6 +30,7 @@ export async function corrigirTranscricao(texto) {
         content:
           "Você é um assistente de correção de textos que segue as normas da língua portuguesa. O texto a ser corrigido é sobre um feedback que se passa na cidade de Maceió, então leve em consideração palavras, expressões e localizações que sejam comuns ou específicas de Maceió. Responda somente com o texto corrigido, sem títulos, comentários ou marcações.",
       },
+      ...(contexto ? [{ role: "system", content: contexto }] : []),
       { role: "user", content: `Reescreva o texto abaixo de forma clara e corrigida:\n\n${texto}` },
     ],
   });
@@ -46,6 +50,18 @@ Subcategoria: Sem subcategoria
 Tema: Sem tema
 Resumo: Sem resumo`;
 
+const REGRAS_E_EXEMPLOS = `Regras de interpretação:
+- A palavra "vaga" é ambígua. Se envolver filho, criança, bebê, creche, escola, CMEI ou Gigantinhos, é vaga em creche ou escola (Educação / Vagas para Creche). Só é estacionamento se falar de carro, veículo, rua ou estacionar.
+- "Gigantinhos" é a rede municipal de creches (CMEIs) de Maceió: sempre Educação.
+- Interprete apelidos e siglas locais pelo contexto acima antes de decidir a categoria.
+
+Exemplo:
+Texto: "Oi prefeito, eu gostaria de uma vaga de gigantinhos para o meu filho aqui no Feitosa, não sei se tem por aqui."
+Categoria: Educação
+Subcategoria: Vagas para Creche
+Tema: Solicitação de vaga em creche
+Resumo: O cidadão solicita uma vaga em uma creche da rede Gigantinhos para o filho, na região do Feitosa.`;
+
 const INSTRUCAO = (texto) =>
   "Para cada texto, siga estas etapas: " +
   "1. Classifique o texto em uma das seguintes categorias principais: Meio Ambiente, Educação, Infraestrutura, Limpeza Urbana, Turismo, Saúde, Transporte. " +
@@ -64,6 +80,7 @@ export async function classificar(texto) {
     model: MODELO_TEXTO,
     messages: [
       { role: "system", content: SISTEMA },
+      { role: "system", content: `${contextoParaClassificacao(texto)}\n\n${REGRAS_E_EXEMPLOS}` },
       { role: "user", content: INSTRUCAO(texto) },
     ],
   });

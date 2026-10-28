@@ -6,7 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "glossario": "node scripts/gerar-glossario.mjs",
+    "predev": "npm run glossario",
+    "prebuild": "npm run glossario"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.13",
