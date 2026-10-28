@@ -5,6 +5,8 @@ import SiteFooter from "../../components/SiteFooter";
 import Recorder from "../../components/Recorder";
 import { BAIRROS, bairroPorSlug, slugify } from "../../../lib/bairros";
 
+export const maxDuration = 60;
+
 export function generateStaticParams() {
   return BAIRROS.map((b) => ({ bairro: slugify(b) }));
 }

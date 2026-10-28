@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { updateTag } from "next/cache";
 import { COOKIE_SESSAO, chaveValida, sessaoValida, tokenSessao } from "../../lib/auth";
-import { getRegistros } from "../../lib/api";
+import { buscarTranscricao as buscar } from "../../lib/server/relatos";
 
 export async function entrar(_estadoAnterior, formData) {
   if (!chaveValida(formData.get("chave"))) return { erro: "Palavra-chave incorreta." };
@@ -29,6 +29,5 @@ export async function atualizarDados() {
 
 export async function buscarTranscricao(id) {
   if (!sessaoValida((await cookies()).get(COOKIE_SESSAO)?.value)) return "";
-  const registro = (await getRegistros()).find((r) => r.id === id);
-  return registro?.transcricao ?? "";
+  return Number.isInteger(id) ? buscar(id) : "";
 }

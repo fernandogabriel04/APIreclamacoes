@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { enviarRelato } from "../relato/actions";
 
 const LIMITE_SEGUNDOS = 60;
 
@@ -69,21 +70,18 @@ export default function Recorder({ bairro }) {
     setFase("enviando");
     setErro("");
     const form = new FormData();
-    form.append("file", audio.blob, "audio.wav");
-    form.append("tipo", "audio");
-    form.append("localizacao", bairro);
-    form.append("origem", `Cabine ${bairro}`);
+    form.append("file", audio.blob, "audio");
+    form.append("bairro", bairro);
     try {
-      const res = await fetch(process.env.NEXT_PUBLIC_API_URL, { method: "POST", body: form });
-      const corpo = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setErro(corpo.error || "Não foi possível enviar o áudio. Tente novamente.");
+      const resultado = await enviarRelato(form);
+      if (resultado?.erro) {
+        setErro(resultado.erro);
         setFase("revisar");
         return;
       }
       setFase("enviado");
     } catch {
-      setErro("Sem conexão com o servidor. Verifique sua internet e tente de novo.");
+      setErro("Não foi possível enviar. Verifique sua internet e tente de novo.");
       setFase("revisar");
     }
   };
