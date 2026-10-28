@@ -6,6 +6,8 @@ export function proxy(request) {
   const host = request.headers.get("host") ?? "";
   const { pathname } = request.nextUrl;
   const noPainel = host.startsWith("dashboard.");
+  // *.vercel.app não aceita subdomínios, então o painel fica acessível por /painel.
+  const dominioVercel = host.split(":")[0].endsWith(".vercel.app");
 
   if (noPainel) {
     if (pathname === PAINEL || pathname.startsWith(`${PAINEL}/`)) return NextResponse.next();
@@ -15,7 +17,7 @@ export function proxy(request) {
   }
 
   if (pathname === PAINEL || pathname.startsWith(`${PAINEL}/`)) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return dominioVercel ? NextResponse.next() : NextResponse.redirect(new URL("/", request.url));
   }
   return NextResponse.next();
 }
